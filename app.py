@@ -13,6 +13,7 @@ from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, LENGTH_CHARS
 from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency
 
 LAST_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_settings.json")
+LAST_SESSION_FILE  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_session.json")
 
 # ── Page config ───────────────────────────────────────────────────────────────
 
@@ -42,9 +43,10 @@ st.markdown("""
 
 # ── Session state ─────────────────────────────────────────────────────────────
 
-# Auto-load last-used settings on fresh page open
+# Auto-load last-used settings and session on fresh page open
 if "_settings_initialized" not in st.session_state:
     st.session_state._settings_initialized = True
+    # Restore settings
     try:
         with open(LAST_SETTINGS_FILE, encoding="utf-8") as _f:
             _last = json.load(_f)
@@ -63,6 +65,18 @@ if "_settings_initialized" not in st.session_state:
             st.session_state[f"cres_{_i}"] = _c.get("residence", "")
             st.session_state[f"csk_{_i}"]  = _c.get("skills", "")
             st.session_state[f"cr_{_i}"]   = _c.get("relationship", "")
+    except Exception:
+        pass
+    # Restore chapters / story state
+    try:
+        with open(LAST_SESSION_FILE, encoding="utf-8") as _f:
+            _sess = json.load(_f)
+        st.session_state["chapters"]      = _sess.get("chapters", [])
+        st.session_state["summaries"]     = _sess.get("summaries", [])
+        st.session_state["story_bible"]   = _sess.get("story_bible", {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": []})
+        st.session_state["saved_settings"] = _sess.get("saved_settings", {})
+        if st.session_state["chapters"]:
+            st.session_state["story_started"] = True
     except Exception:
         pass
 
@@ -327,11 +341,7 @@ with st.sidebar:
     st.divider()
 
     # ── Action buttons ────────────────────────────────────────────────────────
-    start_btn    = st.button("✨ 開始新故事", type="primary", use_container_width=True)
-    continue_btn = st.button("➡️ 繼續下一章", use_container_width=True,
-                             disabled=not st.session_state.story_started)
-    ending_btn   = st.button("🎬 寫結局",     use_container_width=True,
-                             disabled=not st.session_state.story_started)
+    start_btn = st.button("✨ 開始新故事", type="primary", use_container_width=True)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -360,6 +370,20 @@ def _collect_settings() -> dict:
         residence=residence.strip(),
         nsfw=nsfw,
     )
+
+
+def _save_session():
+    try:
+        data = {
+            "chapters":      st.session_state.chapters,
+            "summaries":     st.session_state.summaries,
+            "story_bible":   st.session_state.story_bible,
+            "saved_settings": st.session_state.saved_settings,
+        }
+        with open(LAST_SESSION_FILE, "w", encoding="utf-8") as _f:
+            json.dump(data, _f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 
 def _validate(s: dict) -> list[str]:
@@ -419,6 +443,7 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
     b["open_threads"] = bible_update.get("open_threads", b["open_threads"])
     # Accumulate established facts (newer facts override older ones for same subject)
     b.setdefault("established_facts", []).extend(bible_update.get("established_facts", []))
+    _save_session()
     return full_text
 
 # ── Button handlers ───────────────────────────────────────────────────────────
@@ -438,28 +463,14 @@ if start_btn:
     st.session_state.summaries = []
     st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": []}
     st.session_state.saved_settings = s
+    try:
+        os.remove(LAST_SESSION_FILE)
+    except FileNotFoundError:
+        pass
     st.session_state.story_started = True
     is_final = s["total_chapters"] == 1
     chapter_text = generate_chapter(s, chapter_num=1, is_final=is_final)
     st.session_state.chapters.append(chapter_text)
-    st.rerun()
-
-if continue_btn and st.session_state.story_started:
-    s = st.session_state.saved_settings
-    chapter_num = len(st.session_state.chapters) + 1
-    is_final = chapter_num >= s["total_chapters"]
-    chapter_text = generate_chapter(s, chapter_num=chapter_num,
-                                    prev_text=st.session_state.chapters[-1], is_final=is_final)
-    st.session_state.chapters.append(chapter_text)
-    st.rerun()
-
-if ending_btn and st.session_state.story_started:
-    s = st.session_state.saved_settings
-    chapter_num = len(st.session_state.chapters) + 1
-    chapter_text = generate_chapter(s, chapter_num=chapter_num,
-                                    prev_text=st.session_state.chapters[-1], is_final=True)
-    st.session_state.chapters.append(chapter_text)
-    st.session_state.story_started = False
     st.rerun()
 
 # ── Main display ──────────────────────────────────────────────────────────────
@@ -482,7 +493,7 @@ else:
     world_label = f"《{s['world_input']}》" if s["world_mode"] == "作品世界" else s["world_input"][:30] + "…"
     cp_label = f"♡ {s['cp_character']}" if s["cp_type"] == "我 × 角色" else "無 CP"
     st.markdown(f"**{world_label}**　·　{s['name']}　·　{s['language']}　·　{s['length_label']}　·　{cp_label}")
-    st.caption(f"共 {len(st.session_state.chapters)} 章　｜　點擊左側「繼續下一章」繼續故事")
+    st.caption(f"共 {len(st.session_state.chapters)} 章")
     st.divider()
 
     if len(st.session_state.chapters) == 1:
@@ -493,6 +504,34 @@ else:
         for tab, text in zip(tabs, st.session_state.chapters):
             with tab:
                 st.markdown(f'<div class="chapter-box">{text}</div>', unsafe_allow_html=True)
+
+    st.divider()
+
+    # ── Continue / Ending buttons ─────────────────────────────────────────────
+    if st.session_state.story_started:
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            continue_btn = st.button("➡️ 繼續下一章", type="primary", use_container_width=True)
+        with btn_col2:
+            ending_btn = st.button("🎬 寫結局", use_container_width=True)
+
+        if continue_btn:
+            s = st.session_state.saved_settings
+            chapter_num = len(st.session_state.chapters) + 1
+            is_final = chapter_num >= s["total_chapters"]
+            chapter_text = generate_chapter(s, chapter_num=chapter_num,
+                                            prev_text=st.session_state.chapters[-1], is_final=is_final)
+            st.session_state.chapters.append(chapter_text)
+            st.rerun()
+
+        if ending_btn:
+            s = st.session_state.saved_settings
+            chapter_num = len(st.session_state.chapters) + 1
+            chapter_text = generate_chapter(s, chapter_num=chapter_num,
+                                            prev_text=st.session_state.chapters[-1], is_final=True)
+            st.session_state.chapters.append(chapter_text)
+            st.session_state.story_started = False
+            st.rerun()
 
     st.divider()
     full_novel = "\n\n\n".join(st.session_state.chapters)
