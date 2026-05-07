@@ -496,14 +496,9 @@ else:
     st.caption(f"共 {len(st.session_state.chapters)} 章")
     st.divider()
 
-    if len(st.session_state.chapters) == 1:
-        st.markdown(f'<div class="chapter-box">{st.session_state.chapters[0]}</div>',
-                    unsafe_allow_html=True)
-    else:
-        tabs = st.tabs([f"第 {i+1} 章" for i in range(len(st.session_state.chapters))])
-        for tab, text in zip(tabs, st.session_state.chapters):
-            with tab:
-                st.markdown(f'<div class="chapter-box">{text}</div>', unsafe_allow_html=True)
+    for i, text in enumerate(st.session_state.chapters):
+        st.markdown(f"## 第 {i + 1} 章")
+        st.markdown(f'<div class="chapter-box">{text}</div>', unsafe_allow_html=True)
 
     st.divider()
 
