@@ -4,6 +4,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+if not DEEPSEEK_API_KEY:
+    try:
+        import streamlit as st
+        DEEPSEEK_API_KEY = st.secrets.get("DEEPSEEK_API_KEY", "")
+    except Exception:
+        pass
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-chat"
 
