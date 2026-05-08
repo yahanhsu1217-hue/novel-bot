@@ -436,7 +436,10 @@ def stream_chapter(
 
 （正文）"""
 
-    system_content = _SYSTEM + (_NSFW_ADDON if nsfw else "")
+    training_block_sys = notes_to_prompt_block(training_notes or [])
+    system_content = _SYSTEM + (_NSFW_ADDON if nsfw else "") + (
+        f"\n\n{training_block_sys}" if training_block_sys else ""
+    )
 
     stream = client.chat.completions.create(
         model=DEFAULT_MODEL,
