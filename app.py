@@ -375,6 +375,34 @@ with st.sidebar:
     # ── Training notes ────────────────────────────────────────────────────────
     _all_notes = load_notes()
     st.markdown(f"### 🎓 訓練記錄（{len(_all_notes)} 條）")
+
+    _tc1, _tc2 = st.columns(2)
+    with _tc1:
+        st.download_button(
+            label="⬇️ 匯出訓練記錄",
+            data=json.dumps(_all_notes, ensure_ascii=False, indent=2),
+            file_name="training_notes.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+    with _tc2:
+        _tn_upload = st.file_uploader(
+            "匯入訓練記錄", type="json", key="tn_upload",
+            label_visibility="collapsed",
+        )
+        if _tn_upload is not None and _tn_upload.name != st.session_state.get("_last_tn_file"):
+            try:
+                _imported = json.loads(_tn_upload.read().decode("utf-8"))
+                if isinstance(_imported, list):
+                    from training import save_notes
+                    save_notes(_imported)
+                    st.session_state["_last_tn_file"] = _tn_upload.name
+                    st.rerun()
+                else:
+                    st.error("格式錯誤")
+            except Exception as _e:
+                st.error(f"載入失敗：{_e}")
+
     if _all_notes:
         for _note in _all_notes:
             with st.expander(f"[{_note['type']}] {_note['issue'][:30]}…", expanded=False):
