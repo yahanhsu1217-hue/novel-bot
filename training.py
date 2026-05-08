@@ -32,12 +32,13 @@ def save_notes(notes: list[dict]) -> None:
         json.dump(notes, f, ensure_ascii=False, indent=2)
 
 
-def add_note(excerpt: str, issue: str, issue_type: str) -> dict:
+def add_note(excerpt: str, issue: str, issue_type: str, correction: str = "") -> dict:
     notes = load_notes()
     note = {
         "id": str(uuid4()),
         "excerpt": excerpt.strip(),
         "issue": issue.strip(),
+        "correction": correction.strip(),
         "type": issue_type,
     }
     notes.append(note)
@@ -49,6 +50,9 @@ def delete_note(note_id: str) -> None:
     save_notes([n for n in load_notes() if n.get("id") != note_id])
 
 
+_EXCERPT_PREVIEW_LEN = 80
+
+
 def notes_to_prompt_block(notes: list[dict]) -> str:
     if not notes:
         return ""
@@ -56,6 +60,15 @@ def notes_to_prompt_block(notes: list[dict]) -> str:
         "【用戶訓練指令 — 最高優先級，必須百分之百遵守，不得重犯以下問題】",
     ]
     for n in notes:
-        excerpt_part = f"，問題段落：「{n['excerpt']}」" if n.get("excerpt") else ""
-        lines.append(f"- [{n['type']}] {n['issue']}{excerpt_part}")
+        excerpt = n.get("excerpt", "").strip()
+        if excerpt:
+            preview = excerpt[:_EXCERPT_PREVIEW_LEN].replace("\n", " ")
+            if len(excerpt) > _EXCERPT_PREVIEW_LEN:
+                preview += "…"
+            excerpt_part = f"，問題段落：「{preview}」"
+        else:
+            excerpt_part = ""
+        correction = n.get("correction", "").strip()
+        correction_part = f" → 正確做法：{correction}" if correction else ""
+        lines.append(f"- [{n['type']}] 錯誤：{n['issue']}{correction_part}{excerpt_part}")
     return "\n".join(lines)

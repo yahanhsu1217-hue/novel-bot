@@ -602,14 +602,19 @@ else:
                 placeholder="從章節中複製有問題的句子或段落，貼到這裡…",
             )
             _t_issue = st.text_area(
-                "說明問題",
-                key=f"t_issue_{i}", height=80,
-                placeholder="例：角色明明在室外，下一句卻在房間裡說話；角色自稱名字而非「我」…",
+                "說明問題（發生了什麼錯誤）",
+                key=f"t_issue_{i}", height=60,
+                placeholder="例：角色明明在室外，下一句卻在房間裡說話…",
+            )
+            _t_correction = st.text_area(
+                "正確做法應該是…（填了會讓 AI 更容易遵守）",
+                key=f"t_correction_{i}", height=60,
+                placeholder="例：角色離開室外後，必須先交代進入室內的過程，才能讓她在室內開口說話…",
             )
             _t_type = st.selectbox("問題類型", ISSUE_TYPES, key=f"t_type_{i}")
             if st.button("✅ 加入訓練記錄", key=f"t_submit_{i}"):
                 if _t_issue.strip():
-                    add_note(_t_excerpt, _t_issue, _t_type)
+                    add_note(_t_excerpt, _t_issue, _t_type, _t_correction)
                     st.success("已記錄！下次生成時 AI 將遵守此規則。")
                     st.rerun()
                 else:
