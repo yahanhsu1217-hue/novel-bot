@@ -2,3 +2,5 @@
 __pycache__/
 *.pyc
 last_settings.json
+last_session.json
+training_notes.json

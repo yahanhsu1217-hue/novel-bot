@@ -11,6 +11,7 @@ from openai import OpenAI
 
 from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, LENGTH_CHARS
 from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency
+from training import ISSUE_TYPES, add_note, delete_note, load_notes, notes_to_prompt_block
 
 LAST_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_settings.json")
 LAST_SESSION_FILE  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_session.json")
@@ -51,12 +52,19 @@ if "_settings_initialized" not in st.session_state:
         with open(LAST_SETTINGS_FILE, encoding="utf-8") as _f:
             _last = json.load(_f)
         for _key in ["world_mode", "world_input", "character_notes", "language",
-                     "perspective", "length_label", "total_chapters", "cp_type", "cp_character",
-                     "intimacy", "name", "nickname", "gender", "personality", "appearance",
+                     "perspective", "length_label", "total_chapters", "cp_type",
+                     "name", "nickname", "gender", "personality", "appearance",
                      "residence", "background", "plot_want", "plot_forbid",
                      "environment", "nsfw"]:
             if _key in _last:
                 st.session_state[f"w_{_key}"] = _last[_key]
+        _cp_chars = _last.get("cp_characters", [])
+        if not _cp_chars and _last.get("cp_character"):
+            _cp_chars = [{"name": _last["cp_character"], "intimacy": _last.get("intimacy", "糖（甜蜜互動）")}]
+        st.session_state["num_cp_chars"] = len(_cp_chars)
+        for _j, _cp in enumerate(_cp_chars):
+            st.session_state[f"cpname_{_j}"] = _cp.get("name", "")
+            st.session_state[f"cpinti_{_j}"] = _cp.get("intimacy", "糖（甜蜜互動）")
         st.session_state["num_extra_chars"] = _last.get("num_extra_chars", 0)
         for _i, _c in enumerate(_last.get("extra_characters", [])):
             st.session_state[f"cn_{_i}"]   = _c.get("name", "")
@@ -97,9 +105,8 @@ for k, v in [
     ("w_perspective",     "第一人稱（我）"),
     ("w_length_label",    "中篇（約 2000 字）"),
     ("w_total_chapters",  5),
+    ("num_cp_chars",      0),
     ("w_cp_type",         "無 CP"),
-    ("w_cp_character",    ""),
-    ("w_intimacy",        "糖（甜蜜互動）"),
     ("w_name",            ""),
     ("w_nickname",        ""),
     ("w_gender",          "女"),
@@ -110,6 +117,7 @@ for k, v in [
     ("w_plot_want",       ""),
     ("w_plot_forbid",     ""),
     ("w_nsfw",            False),
+    ("_dir_ver", 0),
 ]:
     if k not in st.session_state:
         st.session_state[k] = v
@@ -133,6 +141,12 @@ with st.sidebar:
                 "skills":       st.session_state.get(f"csk_{i}", ""),
                 "relationship": st.session_state.get(f"cr_{i}", ""),
             })
+        cp_chars = []
+        for i in range(st.session_state.num_cp_chars):
+            cp_chars.append({
+                "name":    st.session_state.get(f"cpname_{i}", ""),
+                "intimacy": st.session_state.get(f"cpinti_{i}", "糖（甜蜜互動）"),
+            })
         data = {
             "world_mode":       st.session_state.get("w_world_mode",       "作品世界"),
             "world_input":      st.session_state.get("w_world_input",       ""),
@@ -143,8 +157,7 @@ with st.sidebar:
             "length_label":     st.session_state.get("w_length_label",      "中篇（約 2000 字）"),
             "total_chapters":   st.session_state.get("w_total_chapters",    5),
             "cp_type":          st.session_state.get("w_cp_type",           "無 CP"),
-            "cp_character":     st.session_state.get("w_cp_character",      ""),
-            "intimacy":         st.session_state.get("w_intimacy",          "糖（甜蜜互動）"),
+            "cp_characters":    cp_chars,
             "name":             st.session_state.get("w_name",              ""),
             "nickname":         st.session_state.get("w_nickname",          ""),
             "gender":           st.session_state.get("w_gender",            "女"),
@@ -174,12 +187,19 @@ with st.sidebar:
         try:
             data = json.loads(uploaded.read().decode("utf-8"))
             for key in ["world_mode", "world_input", "character_notes", "language",
-                        "perspective", "length_label", "total_chapters", "cp_type", "cp_character",
-                        "intimacy", "name", "nickname", "gender", "personality", "appearance",
+                        "perspective", "length_label", "total_chapters", "cp_type",
+                        "name", "nickname", "gender", "personality", "appearance",
                         "residence", "background", "plot_want", "plot_forbid",
                         "environment", "nsfw"]:
                 if key in data:
                     st.session_state[f"w_{key}"] = data[key]
+            _cp_load = data.get("cp_characters", [])
+            if not _cp_load and data.get("cp_character"):
+                _cp_load = [{"name": data["cp_character"], "intimacy": data.get("intimacy", "糖（甜蜜互動）")}]
+            st.session_state.num_cp_chars = len(_cp_load)
+            for _j, _cp in enumerate(_cp_load):
+                st.session_state[f"cpname_{_j}"] = _cp.get("name", "")
+                st.session_state[f"cpinti_{_j}"] = _cp.get("intimacy", "糖（甜蜜互動）")
             n = data.get("num_extra_chars", 0)
             st.session_state.num_extra_chars = n
             for i, c in enumerate(data.get("extra_characters", [])):
@@ -263,18 +283,30 @@ with st.sidebar:
         "配對", ["無 CP", "我 × 角色"],
         horizontal=True, label_visibility="collapsed", key="w_cp_type",
     )
-    cp_character = ""
-    intimacy = "糖（甜蜜互動）"
+    cp_characters = []
     if cp_type == "我 × 角色":
-        cp_character = st.text_input(
-            "角色名稱", key="w_cp_character",
-            placeholder='輸入角色名，或輸入「隨機」由 AI 決定',
-        )
-        intimacy = st.select_slider(
-            "親密程度",
-            options=["清水（純愛暗戀）", "糖（甜蜜互動）", "甜虐（曖昧張力）", "熾熱（激情親密）"],
-            key="w_intimacy",
-        )
+        col_cp_add, col_cp_del = st.columns(2)
+        with col_cp_add:
+            if st.button("＋ 新增 CP 對象", use_container_width=True):
+                st.session_state.num_cp_chars += 1
+        with col_cp_del:
+            if st.button("－ 移除 CP 對象", use_container_width=True,
+                         disabled=st.session_state.num_cp_chars == 0):
+                st.session_state.num_cp_chars -= 1
+        for i in range(st.session_state.num_cp_chars):
+            with st.expander(f"CP 對象 {i + 1}", expanded=True):
+                cp_name = st.text_input(
+                    "角色名稱", key=f"cpname_{i}",
+                    placeholder='輸入角色名，或輸入「隨機」由 AI 決定',
+                )
+                cp_inti = st.select_slider(
+                    "親密程度",
+                    options=["清水（純愛暗戀）", "糖（甜蜜互動）", "甜虐（曖昧張力）", "熾熱（激情親密）"],
+                    key=f"cpinti_{i}",
+                )
+                cp_characters.append({"name": cp_name, "intimacy": cp_inti})
+        if not cp_characters:
+            st.info("點擊「＋ 新增 CP 對象」加入配對角色")
 
     st.divider()
 
@@ -340,7 +372,30 @@ with st.sidebar:
 
     st.divider()
 
+    # ── Training notes ────────────────────────────────────────────────────────
+    _all_notes = load_notes()
+    st.markdown(f"### 🎓 訓練記錄（{len(_all_notes)} 條）")
+    if _all_notes:
+        for _note in _all_notes:
+            with st.expander(f"[{_note['type']}] {_note['issue'][:30]}…", expanded=False):
+                if _note.get("excerpt"):
+                    st.caption(f"問題段落：{_note['excerpt'][:120]}")
+                st.write(_note["issue"])
+                if st.button("🗑 刪除", key=f"del_{_note['id']}"):
+                    delete_note(_note["id"])
+                    st.rerun()
+    else:
+        st.caption("尚無訓練記錄。生成章節後，可在章節下方加入問題回饋。")
+
+    st.divider()
+
     # ── Action buttons ────────────────────────────────────────────────────────
+    st.markdown("### 📌 第一章特別指示")
+    st.text_area(
+        "本章特別指示", key=f"w_first_dir_{st.session_state._dir_ver}",
+        placeholder="例：開場在大雨夜、主角剛收到一封匿名信…（留空則由 AI 自由發揮）",
+        height=80, label_visibility="collapsed",
+    )
     start_btn = st.button("✨ 開始新故事", type="primary", use_container_width=True)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -353,7 +408,7 @@ def _collect_settings() -> dict:
         perspective=perspective,
         length_label=length_label,
         cp_type=cp_type,
-        cp_character=cp_character.strip(),
+        cp_characters=cp_characters,
         name=name.strip(),
         nickname=nickname.strip(),
         gender=gender,
@@ -365,7 +420,6 @@ def _collect_settings() -> dict:
         plot_forbid=plot_forbid.strip(),
         total_chapters=int(total_chapters),
         character_notes=character_notes.strip(),
-        intimacy=intimacy,
         environment=environment.strip(),
         residence=residence.strip(),
         nsfw=nsfw,
@@ -394,8 +448,8 @@ def _validate(s: dict) -> list[str]:
     if not s["personality"]:  missing.append("個性")
     if not s["appearance"]:   missing.append("外貌")
     if not s["background"]:   missing.append("背景故事")
-    if s["cp_type"] == "我 × 角色" and not s["cp_character"]:
-        missing.append("配對角色名稱")
+    if s["cp_type"] == "我 × 角色" and not any(c.get("name", "").strip() for c in s.get("cp_characters", [])):
+        missing.append("至少一個配對角色名稱")
     return missing
 
 # ── API client ────────────────────────────────────────────────────────────────
@@ -408,7 +462,7 @@ client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
 
 # ── Generate logic ────────────────────────────────────────────────────────────
 
-def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_final: bool = False):
+def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_final: bool = False, directive: str = ""):
     full_text = ""
     placeholder = st.empty()
     for chunk in stream_chapter(
@@ -418,6 +472,8 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
         is_final=is_final,
         prev_summaries=st.session_state.summaries,
         story_bible=st.session_state.story_bible,
+        training_notes=load_notes(),
+        chapter_directive=directive,
         **settings,
     ):
         full_text += chunk
@@ -469,7 +525,9 @@ if start_btn:
         pass
     st.session_state.story_started = True
     is_final = s["total_chapters"] == 1
-    chapter_text = generate_chapter(s, chapter_num=1, is_final=is_final)
+    _directive = st.session_state.get(f"w_first_dir_{st.session_state._dir_ver}", "")
+    st.session_state._dir_ver += 1
+    chapter_text = generate_chapter(s, chapter_num=1, is_final=is_final, directive=_directive)
     st.session_state.chapters.append(chapter_text)
     st.rerun()
 
@@ -491,7 +549,8 @@ if not st.session_state.chapters:
 else:
     s = st.session_state.saved_settings
     world_label = f"《{s['world_input']}》" if s["world_mode"] == "作品世界" else s["world_input"][:30] + "…"
-    cp_label = f"♡ {s['cp_character']}" if s["cp_type"] == "我 × 角色" else "無 CP"
+    _cp_names = "、".join(c["name"] for c in s.get("cp_characters", []) if c.get("name", "").strip())
+    cp_label = f"♡ {_cp_names}" if s["cp_type"] == "我 × 角色" and _cp_names else "無 CP"
     st.markdown(f"**{world_label}**　·　{s['name']}　·　{s['language']}　·　{s['length_label']}　·　{cp_label}")
     st.caption(f"共 {len(st.session_state.chapters)} 章")
     st.divider()
@@ -499,11 +558,45 @@ else:
     for i, text in enumerate(st.session_state.chapters):
         st.markdown(f"## 第 {i + 1} 章")
         st.markdown(f'<div class="chapter-box">{text}</div>', unsafe_allow_html=True)
+        if st.button("🔄 重新生成本章", key=f"regen_{i}", use_container_width=True):
+            s = st.session_state.saved_settings
+            prev_text = st.session_state.chapters[i - 1] if i > 0 else ""
+            is_last = i == len(st.session_state.chapters) - 1
+            is_final = is_last and not st.session_state.story_started
+            st.session_state.summaries = st.session_state.summaries[:i]
+            new_text = generate_chapter(s, chapter_num=i + 1, prev_text=prev_text, is_final=is_final)
+            st.session_state.chapters[i] = new_text
+            st.rerun()
+        with st.expander("🎓 訓練回饋：標記本章問題"):
+            _t_excerpt = st.text_area(
+                "貼上有問題的段落（可留空）",
+                key=f"t_excerpt_{i}", height=80,
+                placeholder="從章節中複製有問題的句子或段落，貼到這裡…",
+            )
+            _t_issue = st.text_area(
+                "說明問題",
+                key=f"t_issue_{i}", height=80,
+                placeholder="例：角色明明在室外，下一句卻在房間裡說話；角色自稱名字而非「我」…",
+            )
+            _t_type = st.selectbox("問題類型", ISSUE_TYPES, key=f"t_type_{i}")
+            if st.button("✅ 加入訓練記錄", key=f"t_submit_{i}"):
+                if _t_issue.strip():
+                    add_note(_t_excerpt, _t_issue, _t_type)
+                    st.success("已記錄！下次生成時 AI 將遵守此規則。")
+                    st.rerun()
+                else:
+                    st.warning("請填寫問題說明。")
 
     st.divider()
 
     # ── Continue / Ending buttons ─────────────────────────────────────────────
     if st.session_state.story_started:
+        st.markdown("#### 📌 下一章特別指示")
+        st.text_area(
+            "下一章特別指示", key=f"next_dir_{st.session_state._dir_ver}",
+            placeholder="例：這章以回憶展開、發生停電意外、CP 獨處…（留空則由 AI 自由發揮）",
+            height=80, label_visibility="collapsed",
+        )
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
             continue_btn = st.button("➡️ 繼續下一章", type="primary", use_container_width=True)
@@ -514,16 +607,22 @@ else:
             s = st.session_state.saved_settings
             chapter_num = len(st.session_state.chapters) + 1
             is_final = chapter_num >= s["total_chapters"]
+            _directive = st.session_state.get(f"next_dir_{st.session_state._dir_ver}", "")
+            st.session_state._dir_ver += 1
             chapter_text = generate_chapter(s, chapter_num=chapter_num,
-                                            prev_text=st.session_state.chapters[-1], is_final=is_final)
+                                            prev_text=st.session_state.chapters[-1],
+                                            is_final=is_final, directive=_directive)
             st.session_state.chapters.append(chapter_text)
             st.rerun()
 
         if ending_btn:
             s = st.session_state.saved_settings
             chapter_num = len(st.session_state.chapters) + 1
+            _directive = st.session_state.get(f"next_dir_{st.session_state._dir_ver}", "")
+            st.session_state._dir_ver += 1
             chapter_text = generate_chapter(s, chapter_num=chapter_num,
-                                            prev_text=st.session_state.chapters[-1], is_final=True)
+                                            prev_text=st.session_state.chapters[-1],
+                                            is_final=True, directive=_directive)
             st.session_state.chapters.append(chapter_text)
             st.session_state.story_started = False
             st.rerun()
