@@ -212,6 +212,43 @@ _INTIMACY_GUIDE = {
     ),
 }
 
+_PACING_GUIDE = {
+    "緩節奏・情緒內斂": (
+        "場景節奏舒緩，給細節充足的呼吸空間，每個動作與環境都完整展開；"
+        "情緒深埋在動作、視線、沉默與環境細節裡，不直接說破，讓讀者自行感受。"
+        "禁止用「她感到難過」「他心跳加速」等直述句——改用具體的身體反應或環境暗示。"
+    ),
+    "緩節奏・情緒爆發": (
+        "場景節奏舒緩，大量細節鋪墊與情感積蓄；"
+        "但在關鍵時刻，情緒必須毫不保留地傾瀉而出，形成強烈的張力落差。"
+        "慢慢燃燒，然後在高潮點點火——前後的強烈對比是這個節奏的核心。"
+    ),
+    "快節奏・情緒內斂": (
+        "場景節奏明快，以行動和對話推進，不在細節上過多停留；"
+        "情緒輕描淡寫，藏在言行之間，不作停留，讓讀者在快速閱讀中感受餘韻。"
+        "每一句都要有推進作用，冗餘描寫一律刪去。"
+    ),
+    "快節奏・情緒爆發": (
+        "場景節奏緊湊，衝突與轉折迭起，毫不拖沓；"
+        "情緒直接激烈，每個高潮都不保留，給人窒息感與高強度閱讀體驗。"
+        "對話短促有力，動作乾脆，情緒來了就砸出去，不壓抑、不迴避。"
+    ),
+    "張弛交替・積蓄爆發": (
+        "慢場景與快場景交錯出現，形成韻律：先用緩慢細節積蓄張力，再以快速推進釋放；"
+        "情緒在壓抑與爆發之間循環——長時間的克制換來一次徹底的崩潰或爆發。"
+        "讀者跟著故事一起呼吸，節奏本身就是敘事的一部分。"
+    ),
+}
+
+_TONE_GUIDE = {
+    "甜蜜溫馨": "兩人之間的相處充滿溫度與安全感，互動輕柔，即使有小摩擦也帶著甜意，整體氛圍令讀者感到療癒。",
+    "歡喜冤家": "兩人表面針鋒相對、鬥嘴不休，卻在言語交鋒中透出掩不住的在意；衝突是主旋律，但每次衝突都暗藏情意。",
+    "虐心糾纏": "感情中充滿誤解、錯過、無法言說的傷痛；即使有甜蜜的瞬間，也伴隨著隱隱的痛苦或無力感，讓讀者揪心。",
+    "青春悸動": "懵懂、新鮮、充滿少年感；第一次心跳、第一次靠近，一切都是初體驗，帶有青澀的羞赧和純粹的悸動。",
+    "禁忌張力": "兩人之間存在不該越過的界線（身份、立場、規則），越是被壓抑越是無法忽視，張力來自於「不能」與「想要」的撕扯。",
+    "宿命糾纏": "兩人似乎被命運反覆推在一起，有種無法逃脫的宿命感；相遇像是早已注定，每次分離都像是為下一次重逢蓄力。",
+}
+
 
 def _cp_str(cp_type: str, cp_characters: list[dict], name: str, nsfw: bool = False) -> str:
     if cp_type == "我 × 角色" and cp_characters:
@@ -315,6 +352,8 @@ def stream_chapter(
     training_notes: list[dict] | None = None,
     chapter_directive: str = "",
     style_reference: str = "",
+    love_tone: str = "",
+    pacing: str = "",
 ):
     target = LENGTH_CHARS.get(length_label, 2000)
 
@@ -395,6 +434,26 @@ def stream_chapter(
 
     training_block = notes_to_prompt_block(training_notes or [])
 
+    pacing_block = ""
+    if pacing:
+        pacing_desc = _PACING_GUIDE.get(pacing, "")
+        pacing_block = (
+            f"【敘事節奏：{pacing} — 整篇必須貫徹】\n"
+            f"{pacing_desc}\n"
+            f"- 每進入新場景前，先判斷這個場景應快還是慢，再決定細節密度與情緒呈現方式\n"
+            f"- 節奏錯誤（快的地方拖沓、慢的地方草率）視為失敗，必須重寫"
+        )
+
+    love_tone_block = ""
+    if love_tone and cp_type == "我 × 角色":
+        tone_desc = _TONE_GUIDE.get(love_tone, "")
+        love_tone_block = (
+            f"【戀愛情緒基調：{love_tone} — 整篇必須貫徹】\n"
+            f"{tone_desc}\n"
+            f"- 所有與感情相關的場景、對話、內心描寫，都必須服務這個基調\n"
+            f"- 基調是整體方向，不是每一秒都要強調；在日常互動中自然滲透，而非硬套"
+        )
+
     style_block = ""
     if style_reference:
         style_block = (
@@ -419,6 +478,8 @@ def stream_chapter(
         notes_block,
         name_ref_block,
         _cp_str(cp_type, cp_characters, name, nsfw),
+        pacing_block,
+        love_tone_block,
         me_line,
         _extra_chars_str(extra_characters),
         _must_appear_block(extra_characters, cp_characters, cp_type),

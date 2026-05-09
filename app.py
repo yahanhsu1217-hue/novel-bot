@@ -53,6 +53,7 @@ if "_settings_initialized" not in st.session_state:
             _last = json.load(_f)
         for _key in ["world_mode", "world_input", "character_notes", "language",
                      "perspective", "length_label", "total_chapters", "cp_type",
+                     "love_tone", "pacing",
                      "name", "nickname", "gender", "personality", "appearance",
                      "residence", "background", "plot_want", "plot_forbid",
                      "environment", "nsfw", "style_reference"]:
@@ -107,6 +108,8 @@ for k, v in [
     ("w_total_chapters",  5),
     ("num_cp_chars",      0),
     ("w_cp_type",         "無 CP"),
+    ("w_love_tone",       "甜蜜溫馨"),
+    ("w_pacing",          "張弛交替・積蓄爆發"),
     ("w_name",            ""),
     ("w_nickname",        ""),
     ("w_gender",          "女"),
@@ -154,7 +157,7 @@ with st.sidebar:
         cp_chars = []
         for i in range(st.session_state.num_cp_chars):
             cp_chars.append({
-                "name":    st.session_state.get(f"cpname_{i}", ""),
+                "name":     st.session_state.get(f"cpname_{i}", ""),
                 "intimacy": st.session_state.get(f"cpinti_{i}", "糖（甜蜜互動）"),
             })
         data = {
@@ -167,6 +170,8 @@ with st.sidebar:
             "length_label":     st.session_state.get("w_length_label",      "中篇（約 2000 字）"),
             "total_chapters":   st.session_state.get("w_total_chapters",    5),
             "cp_type":          st.session_state.get("w_cp_type",           "無 CP"),
+            "love_tone":        st.session_state.get("w_love_tone",         "甜蜜溫馨"),
+            "pacing":           st.session_state.get("w_pacing",            "張弛交替・積蓄爆發"),
             "cp_characters":    cp_chars,
             "name":             st.session_state.get("w_name",              ""),
             "nickname":         st.session_state.get("w_nickname",          ""),
@@ -199,6 +204,7 @@ with st.sidebar:
             data = json.loads(uploaded.read().decode("utf-8"))
             for key in ["world_mode", "world_input", "character_notes", "language",
                         "perspective", "length_label", "total_chapters", "cp_type",
+                        "love_tone", "pacing",
                         "name", "nickname", "gender", "personality", "appearance",
                         "residence", "background", "plot_want", "plot_forbid",
                         "environment", "nsfw", "style_reference"]:
@@ -285,6 +291,12 @@ with st.sidebar:
         step=1, key="w_total_chapters",
         help="AI 會根據進度調整節奏，最後一章自動收尾",
     )
+    pacing = st.selectbox(
+        "敘事節奏",
+        options=["緩節奏・情緒內斂", "緩節奏・情緒爆發", "快節奏・情緒內斂", "快節奏・情緒爆發", "張弛交替・積蓄爆發"],
+        key="w_pacing",
+        help="控制場景該快還是慢、情緒該藏還是爆",
+    )
 
     st.divider()
 
@@ -318,6 +330,13 @@ with st.sidebar:
                 cp_characters.append({"name": cp_name, "intimacy": cp_inti})
         if not cp_characters:
             st.info("點擊「＋ 新增 CP 對象」加入配對角色")
+
+    love_tone = st.selectbox(
+        "戀愛情緒基調",
+        options=["甜蜜溫馨", "歡喜冤家", "虐心糾纏", "青春悸動", "禁忌張力", "宿命糾纏"],
+        key="w_love_tone",
+        help="整個故事的戀愛情感氛圍走向",
+    )
 
     st.divider()
 
@@ -478,6 +497,8 @@ def _collect_settings() -> dict:
         perspective=perspective,
         length_label=length_label,
         cp_type=cp_type,
+        pacing=pacing,
+        love_tone=love_tone,
         cp_characters=cp_characters,
         name=name.strip(),
         nickname=nickname.strip(),
