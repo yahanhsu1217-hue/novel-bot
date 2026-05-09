@@ -447,7 +447,9 @@ def stream_chapter(
     )
 
     directive_block = (
-        f"【本章特別指示 — 最高優先級，必須在本章中執行】\n{chapter_directive}"
+        f"【⚠️ 本章特別指示 — 最高優先級，開始寫作前必須完整閱讀並逐條執行】\n"
+        f"{chapter_directive}\n"
+        f"【以上每一條指示必須在本章正文中明確、具體地體現；不可用旁白輕描淡寫帶過；未執行即視為失敗，必須重寫。】"
         if chapter_directive.strip() else ""
     )
 
@@ -458,12 +460,12 @@ def stream_chapter(
 {pov_instruction}
 目標字數：{target} 字
 {progress_note}
-{directive_block}
 
 【我的背景故事】
 {background}
 
 請創作第一章，建立世界氛圍與角色，帶出故事開端{"，給出完整結局。" if is_final else "，結尾留下讓人想繼續讀的鉤子。"}
+{directive_block}
 直接輸出故事正文，格式如下：
 
 第一章　[章節標題]
@@ -483,12 +485,12 @@ def stream_chapter(
 {pov_instruction}
 目標字數：{target} 字
 {progress_note}
-{directive_block}
 
 【上一章結尾】
 {context}
 
 {ending_instruction}
+{directive_block}
 直接輸出故事正文，格式如下：
 
 第{chapter_num}章　[章節標題]
@@ -496,11 +498,16 @@ def stream_chapter(
 （正文）"""
 
     training_block_sys = notes_to_prompt_block(training_notes or [])
+    directive_sys_addon = (
+        f"\n\n【本章特別指示（最高優先級，凌駕所有其他規則）】\n{chapter_directive.strip()}"
+        if chapter_directive.strip() else ""
+    )
     system_content = (
         _SYSTEM
         + (_NSFW_ADDON if nsfw else "")
         + (_STYLE_SYSTEM_ADDON if style_reference else "")
         + (f"\n\n{training_block_sys}" if training_block_sys else "")
+        + directive_sys_addon
     )
 
     stream = client.chat.completions.create(
