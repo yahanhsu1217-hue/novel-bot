@@ -398,19 +398,20 @@ def stream_chapter(
     style_block = ""
     if style_reference:
         style_block = (
-            "【文風參考分析 — 最高優先級，用相同的密度、節奏與選字精準度寫作】\n"
+            "【⚠️ 文風強制執行 — 最高優先級，每一句都必須貫徹，省略即失敗】\n"
+            "根據以下文風分析，用完全相同的密度、節奏與選字精準度寫作：\n\n"
             f"{style_reference}\n\n"
-            "【強制執行的具體規則】\n"
-            "- 嚴禁模糊或抽象詞彙；每個感受用具體可感知的詞語表達（觸覺、溫度、氣味、聲音）\n"
-            "- 重要場景必須展開描寫，禁止一句帶過\n"
-            "- 凡覺得可以略過之處，正是必須展開的地方\n"
-            "- 嚴禁「隨後」「不久後」「過了一會兒」「稍後」「片刻後」等跳躍時間的詞\n"
-            "- 情緒必須透過身體感受呈現，而非直接陳述情緒\n"
-            "- 動詞有力精準，避免「走」「說」「看」「感到」等平淡動詞"
+            "【逐條硬性規則，違反任何一條即視為失敗】\n"
+            "- 嚴禁模糊或抽象詞彙；每個感受用具體可感知的詞語表達（觸覺、溫度、氣味、聲音、視覺細節）\n"
+            "- 每個場景必須完整展開描寫，絕對禁止一句話帶過任何動作或反應\n"
+            "- 凡覺得可以略過之處，正是必須大篇幅展開的地方，不可有任何省略\n"
+            "- 嚴禁「隨後」「不久後」「過了一會兒」「稍後」「片刻後」「沒多久」等跳躍詞；必須寫出完整過程\n"
+            "- 情緒透過身體感受呈現（心跳、呼吸、皮膚反應、肌肉張力），嚴禁直接陳述情緒\n"
+            "- 動詞必須有力精準，嚴禁「走」「說」「看」「感到」「覺得」等平淡動詞\n"
+            f"- 目標字數 {target} 字，寫滿為止，不足即失敗，必須重寫"
         )
 
     setting_block = "\n".join(filter(None, [
-        style_block,
         training_block,
         _world_str(world_mode, world_input),
         env_block,
@@ -465,6 +466,7 @@ def stream_chapter(
 {background}
 
 請創作第一章，建立世界氛圍與角色，帶出故事開端{"，給出完整結局。" if is_final else "，結尾留下讓人想繼續讀的鉤子。"}
+{style_block}
 {directive_block}
 直接輸出故事正文，格式如下：
 
@@ -490,6 +492,7 @@ def stream_chapter(
 {context}
 
 {ending_instruction}
+{style_block}
 {directive_block}
 直接輸出故事正文，格式如下：
 
@@ -498,6 +501,13 @@ def stream_chapter(
 （正文）"""
 
     training_block_sys = notes_to_prompt_block(training_notes or [])
+    style_sys_addon = (
+        f"\n\n【文風強制規則 — 凌駕所有其他規則，每句話都必須符合】\n"
+        f"用戶提供的文風分析如下，必須完全照此密度、節奏、選字精準度寫作：\n{style_reference.strip()}\n"
+        f"核心原則：動詞承載張力、形容詞僅在關鍵處點睛、感官細節以觸覺與視覺為主、"
+        f"時間以連續動作推進（禁止跳躍詞）、情緒透過身體反應而非心理描述。"
+        if style_reference.strip() else ""
+    )
     directive_sys_addon = (
         f"\n\n【本章特別指示（最高優先級，凌駕所有其他規則）】\n{chapter_directive.strip()}"
         if chapter_directive.strip() else ""
@@ -507,6 +517,7 @@ def stream_chapter(
         + (_NSFW_ADDON if nsfw else "")
         + (_STYLE_SYSTEM_ADDON if style_reference else "")
         + (f"\n\n{training_block_sys}" if training_block_sys else "")
+        + style_sys_addon
         + directive_sys_addon
     )
 
@@ -516,7 +527,7 @@ def stream_chapter(
             {"role": "system", "content": system_content},
             {"role": "user",   "content": prompt},
         ],
-        max_tokens=6000,
+        max_tokens=8000,
         temperature=0.72,
         stream=True,
     )
