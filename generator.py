@@ -40,6 +40,29 @@ def extract_story_bible(client: OpenAI, chapter_text: str, chapter_num: int) -> 
     return bible
 
 
+def analyze_writing_style(client: OpenAI, sample_text: str) -> str:
+    """Analyze a writing sample and return a style description for use in prompts."""
+    resp = client.chat.completions.create(
+        model=DEFAULT_MODEL,
+        messages=[{"role": "user", "content":
+            "請分析以下文章的寫作風格特色，輸出一段連貫說明（不要分點標題），"
+            "具體描述並引用原文詞語或句子佐證，涵蓋以下面向：\n"
+            "句子節奏（短促有力？長句迴旋？混合節奏？）、"
+            "動詞的力度與精準度（舉代表性動詞，說明為何這些動詞有效）、"
+            "形容詞密度（稀疏精準？密集堆疊？）、"
+            "感官描寫方式（最常用哪種感官？如何具體呈現觸覺、溫度、氣味？）、"
+            "時間過渡手法（如何處理時間流逝？是否展開過程而非跳躍？）、"
+            "情緒呈現方式（直述情緒？透過肢體動作？透過環境細節？）、"
+            "整體文字密度（每句話的信息量高低）。\n\n"
+            "分析目標：讓另一位作者能照此密度和選字精準度寫出相似質感的文字。\n\n"
+            f"{sample_text}"
+        }],
+        max_tokens=900,
+        temperature=0.2,
+    )
+    return resp.choices[0].message.content.strip()
+
+
 def fix_consistency(client: OpenAI, chapter_text: str, protagonist_name: str = "", extra_names: list[str] | None = None, nickname: str = "") -> str:
     """Scan chapter for internal contradictions (location, numbers, facts) and fix them."""
     name_rules = []
@@ -120,15 +143,20 @@ _SYSTEM = """你是一位頂尖的小說作家，擅長創作沉浸感強的連�
 - 描寫同一角色的動作或反應時，不可每次都用同樣的詞彙或句型
 - 寫作前必須回顧「前面章節已發生的事件摘要」，確保新內容在情節和語言上都是全新的推進
 
-【嚴格禁止的情感套路模板】
-以下是最常見的濫用橋段，整個故事中每種最多只能出現一次，之後必須用完全不同的方式處理類似情境：
-- 「角色表態要同行」→「主角心中湧出暖流」→「好，我們一起去」
-- 角色用堅定眼神說出一句話，主角被打動後妥協
-- 爭執後沉默，然後其中一人主動示好，另一人立刻原諒
-- 主角獨自出發，某人在身後叫住，說出感人的話
-- 危機解除後眾人相視而笑或互相擁抱
+【嚴格禁止的情感套路模板 — 整個故事禁止使用，不得以任何變體出現】
+以下橋段禁止出現，連結構相似的版本也不行，遇到相似情境時必須從根本上用不同敘事弧線處理：
+- 「角色表態要同行」→「主角心中湧出暖流／某種感動」→「好，一起去」（整條弧線禁用）
+- 角色用堅定眼神或語氣說出一句話，主角因此被打動後改變態度
+- 爭執後沉默，其中一人主動示好，另一人立刻原諒或和解
+- 主角獨自出發，某人在身後叫住，說出感人或堅定的話
+- 危機解除後相視而笑、互相擁抱、說「我們做到了」
 - 角色說「你別想甩掉我」或語義相近的任何句子
-若需要處理「同伴想一起去」的情境，必須用衝突、條件談判、沉默對峙、強行跟上、被拒絕後的落寞等完全不同的方式呈現
+- 角色說出感人宣言後，另一角色沉默、眼眶泛紅、或點頭
+- 心跳加速 + 移開視線 + 沒說話 的曖昧三件套
+【場景結構多樣性 — 強制要求】
+在寫任何情感或衝突場景前，必須先確認：這個場景的起點、衝突類型、化解方式，和前面章節是否有本質上的不同。
+若起點相似（如「兩人意見分歧」），化解方式必須截然不同：前一章用了「沉默後和解」，本章必須用「衝突升級、其中一人離開」或「條件談判、各退一步但心存芥蒂」或「根本沒有解決，帶著裂痕繼續」。
+禁止每次危機都能靠一句話或一個眼神化解。
 
 【創作守則】
 1. 世界觀、規則與邏輯嚴格遵守，不可自創矛盾設定
@@ -143,6 +171,16 @@ def _world_str(world_mode: str, world_input: str) -> str:
         return f"作品：《{world_input}》\n（請嚴格還原原作世界觀、角色性格與劇情邏輯）"
     return f"世界設定：{world_input}"
 
+
+_STYLE_SYSTEM_ADDON = """
+【文風寫作規則 — 強制執行，整篇必須貫徹，不可違背】
+- 嚴禁使用模糊或抽象的詞彙；每個感受必須用具體、可感知的詞語表達（觸覺、溫度、氣味、聲音、視覺細節），禁止寫「難以言說的感覺」「某種情緒湧上」
+- 重要場景不可用一句話帶過；必須展開描寫，包含觸覺、溫度、氣味、節奏感等細節
+- 凡覺得可以略過之處，正是必須展開的地方；嚴禁用省略或暗示跳過任何場景
+- 嚴禁使用「隨後」「不久後」「過了一會兒」「稍後」「片刻後」「沒多久」等跳躍時間的詞略過過程；必須寫出過程本身
+- 情緒反應必須透過身體感受呈現（心跳、呼吸變化、皮膚反應、肌肉張力、手的動作），而非直接陳述「她感到緊張」「他心情複雜」
+- 動詞選擇有力且精準，避免「走」「說」「看」「感到」等平淡動詞，改用具體動作的精確描述
+"""
 
 _NSFW_ADDON = """
 【限制級模式 — 強制執行】
@@ -276,6 +314,7 @@ def stream_chapter(
     nsfw: bool = False,
     training_notes: list[dict] | None = None,
     chapter_directive: str = "",
+    style_reference: str = "",
 ):
     target = LENGTH_CHARS.get(length_label, 2000)
 
@@ -308,7 +347,12 @@ def stream_chapter(
             parts.append(f"【絕對禁止重複使用的語句（逐字禁用）】\n{phrases}")
         if story_bible.get("used_tropes"):
             tropes = "\n".join(f"- {t}" for t in story_bible["used_tropes"])
-            parts.append(f"【已用過的套路（禁止再用）】\n{tropes}")
+            parts.append(
+                f"【已用過的套路 — 絕對禁止重複，連結構相似的版本都不行】\n"
+                f"以下套路已出現，後續章節處理相似情境時，必須從敘事結構根本上做出改變：\n"
+                f"{tropes}\n"
+                f"寫作前必須自問：「這個場景的情感弧線和以上哪條最相似？如果相似，我要怎麼從起點就走一條截然不同的路？」"
+            )
         if story_bible.get("open_threads"):
             threads = "\n".join(f"- {t}" for t in story_bible["open_threads"])
             parts.append(f"【未解決的伏筆（必須在後續章節回應）】\n{threads}")
@@ -351,7 +395,22 @@ def stream_chapter(
 
     training_block = notes_to_prompt_block(training_notes or [])
 
+    style_block = ""
+    if style_reference:
+        style_block = (
+            "【文風參考分析 — 最高優先級，用相同的密度、節奏與選字精準度寫作】\n"
+            f"{style_reference}\n\n"
+            "【強制執行的具體規則】\n"
+            "- 嚴禁模糊或抽象詞彙；每個感受用具體可感知的詞語表達（觸覺、溫度、氣味、聲音）\n"
+            "- 重要場景必須展開描寫，禁止一句帶過\n"
+            "- 凡覺得可以略過之處，正是必須展開的地方\n"
+            "- 嚴禁「隨後」「不久後」「過了一會兒」「稍後」「片刻後」等跳躍時間的詞\n"
+            "- 情緒必須透過身體感受呈現，而非直接陳述情緒\n"
+            "- 動詞有力精準，避免「走」「說」「看」「感到」等平淡動詞"
+        )
+
     setting_block = "\n".join(filter(None, [
+        style_block,
         training_block,
         _world_str(world_mode, world_input),
         env_block,
@@ -437,8 +496,11 @@ def stream_chapter(
 （正文）"""
 
     training_block_sys = notes_to_prompt_block(training_notes or [])
-    system_content = _SYSTEM + (_NSFW_ADDON if nsfw else "") + (
-        f"\n\n{training_block_sys}" if training_block_sys else ""
+    system_content = (
+        _SYSTEM
+        + (_NSFW_ADDON if nsfw else "")
+        + (_STYLE_SYSTEM_ADDON if style_reference else "")
+        + (f"\n\n{training_block_sys}" if training_block_sys else "")
     )
 
     stream = client.chat.completions.create(

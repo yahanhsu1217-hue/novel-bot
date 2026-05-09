@@ -10,7 +10,7 @@ import streamlit as st
 from openai import OpenAI
 
 from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, LENGTH_CHARS
-from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency
+from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency, analyze_writing_style
 from training import ISSUE_TYPES, add_note, delete_note, load_notes, notes_to_prompt_block
 
 LAST_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_settings.json")
@@ -55,7 +55,7 @@ if "_settings_initialized" not in st.session_state:
                      "perspective", "length_label", "total_chapters", "cp_type",
                      "name", "nickname", "gender", "personality", "appearance",
                      "residence", "background", "plot_want", "plot_forbid",
-                     "environment", "nsfw"]:
+                     "environment", "nsfw", "style_reference"]:
             if _key in _last:
                 st.session_state[f"w_{_key}"] = _last[_key]
         _cp_chars = _last.get("cp_characters", [])
@@ -117,10 +117,20 @@ for k, v in [
     ("w_plot_want",       ""),
     ("w_plot_forbid",     ""),
     ("w_nsfw",            False),
+    ("w_style_sample",    ""),
+    ("w_style_reference", ""),
     ("_dir_ver", 0),
 ]:
     if k not in st.session_state:
         st.session_state[k] = v
+
+# ── API client ────────────────────────────────────────────────────────────────
+
+if not DEEPSEEK_API_KEY:
+    st.error("❌ DEEPSEEK_API_KEY 未設定，請在 .env 檔案中加入 API 金鑰。")
+    st.stop()
+
+client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
@@ -168,6 +178,7 @@ with st.sidebar:
             "plot_want":        st.session_state.get("w_plot_want",         ""),
             "plot_forbid":      st.session_state.get("w_plot_forbid",       ""),
             "nsfw":             st.session_state.get("w_nsfw",              False),
+            "style_reference":  st.session_state.get("w_style_reference",   ""),
             "num_extra_chars":  st.session_state.num_extra_chars,
             "extra_characters": chars,
         }
@@ -190,7 +201,7 @@ with st.sidebar:
                         "perspective", "length_label", "total_chapters", "cp_type",
                         "name", "nickname", "gender", "personality", "appearance",
                         "residence", "background", "plot_want", "plot_forbid",
-                        "environment", "nsfw"]:
+                        "environment", "nsfw", "style_reference"]:
                 if key in data:
                     st.session_state[f"w_{key}"] = data[key]
             _cp_load = data.get("cp_characters", [])
@@ -372,6 +383,37 @@ with st.sidebar:
 
     st.divider()
 
+    # ── Style reference ───────────────────────────────────────────────────────
+    st.markdown("### ✍️ 文風參考")
+    st.caption("貼上你欣賞的作者文章片段，AI 將分析其文風並照此密度與選字寫作")
+    st.text_area(
+        "參考文章片段", key="w_style_sample",
+        placeholder="貼上任何你欣賞的中文小說段落（建議 200-1000 字）…",
+        height=160, label_visibility="collapsed",
+    )
+    _sty_col1, _sty_col2 = st.columns(2)
+    with _sty_col1:
+        _analyze_btn = st.button("🔍 分析文風", use_container_width=True)
+    with _sty_col2:
+        if st.button("✕ 清除文風", use_container_width=True):
+            st.session_state["w_style_reference"] = ""
+            st.rerun()
+    if _analyze_btn:
+        _sample = st.session_state.get("w_style_sample", "").strip()
+        if _sample:
+            with st.spinner("分析文風中…"):
+                _analysis = analyze_writing_style(client, _sample)
+                st.session_state["w_style_reference"] = _analysis
+            st.rerun()
+        else:
+            st.warning("請先貼上參考文章片段")
+    if st.session_state.get("w_style_reference"):
+        st.success("✅ 文風已分析，生成時將套用")
+        with st.expander("查看文風分析", expanded=False):
+            st.write(st.session_state["w_style_reference"])
+
+    st.divider()
+
     # ── Training notes ────────────────────────────────────────────────────────
     _all_notes = load_notes()
     st.markdown(f"### 🎓 訓練記錄（{len(_all_notes)} 條）")
@@ -480,17 +522,9 @@ def _validate(s: dict) -> list[str]:
         missing.append("至少一個配對角色名稱")
     return missing
 
-# ── API client ────────────────────────────────────────────────────────────────
-
-if not DEEPSEEK_API_KEY:
-    st.error("❌ DEEPSEEK_API_KEY 未設定，請在 .env 檔案中加入 API 金鑰。")
-    st.stop()
-
-client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
-
 # ── Generate logic ────────────────────────────────────────────────────────────
 
-def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_final: bool = False, directive: str = ""):
+def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_final: bool = False, directive: str = "", style_reference: str = ""):
     full_text = ""
     placeholder = st.empty()
     for chunk in stream_chapter(
@@ -502,6 +536,7 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
         story_bible=st.session_state.story_bible,
         training_notes=load_notes(),
         chapter_directive=directive,
+        style_reference=style_reference,
         **settings,
     ):
         full_text += chunk
@@ -555,7 +590,8 @@ if start_btn:
     is_final = s["total_chapters"] == 1
     _directive = st.session_state.get(f"w_first_dir_{st.session_state._dir_ver}", "")
     st.session_state._dir_ver += 1
-    chapter_text = generate_chapter(s, chapter_num=1, is_final=is_final, directive=_directive)
+    _style_ref = st.session_state.get("w_style_reference", "")
+    chapter_text = generate_chapter(s, chapter_num=1, is_final=is_final, directive=_directive, style_reference=_style_ref)
     st.session_state.chapters.append(chapter_text)
     st.rerun()
 
@@ -592,7 +628,8 @@ else:
             is_last = i == len(st.session_state.chapters) - 1
             is_final = is_last and not st.session_state.story_started
             st.session_state.summaries = st.session_state.summaries[:i]
-            new_text = generate_chapter(s, chapter_num=i + 1, prev_text=prev_text, is_final=is_final)
+            new_text = generate_chapter(s, chapter_num=i + 1, prev_text=prev_text, is_final=is_final,
+                                        style_reference=st.session_state.get("w_style_reference", ""))
             st.session_state.chapters[i] = new_text
             st.rerun()
         with st.expander("🎓 訓練回饋：標記本章問題"):
@@ -644,7 +681,8 @@ else:
             st.session_state._dir_ver += 1
             chapter_text = generate_chapter(s, chapter_num=chapter_num,
                                             prev_text=st.session_state.chapters[-1],
-                                            is_final=is_final, directive=_directive)
+                                            is_final=is_final, directive=_directive,
+                                            style_reference=st.session_state.get("w_style_reference", ""))
             st.session_state.chapters.append(chapter_text)
             st.rerun()
 
@@ -655,7 +693,8 @@ else:
             st.session_state._dir_ver += 1
             chapter_text = generate_chapter(s, chapter_num=chapter_num,
                                             prev_text=st.session_state.chapters[-1],
-                                            is_final=True, directive=_directive)
+                                            is_final=True, directive=_directive,
+                                            style_reference=st.session_state.get("w_style_reference", ""))
             st.session_state.chapters.append(chapter_text)
             st.session_state.story_started = False
             st.rerun()
