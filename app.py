@@ -10,7 +10,7 @@ import streamlit as st
 from openai import OpenAI
 
 from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, LENGTH_CHARS
-from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency, fix_sensory_crutches, analyze_writing_style
+from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency, fix_sensory_crutches, fix_repetitive_paragraphs, analyze_writing_style
 from training import ISSUE_TYPES, add_note, delete_note, load_notes, notes_to_prompt_block
 
 LAST_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_settings.json")
@@ -597,6 +597,12 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
             unsafe_allow_html=True,
         )
     if settings.get("nsfw"):
+        with st.spinner("✍️ 修正重複段落…"):
+            full_text = fix_repetitive_paragraphs(client, full_text)
+            placeholder.markdown(
+                f'<div class="chapter-box">{full_text}</div>',
+                unsafe_allow_html=True,
+            )
         with st.spinner("✍️ 改寫重複感知句式…"):
             full_text = fix_sensory_crutches(client, full_text)
             placeholder.markdown(

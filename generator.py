@@ -63,6 +63,39 @@ def analyze_writing_style(client: OpenAI, sample_text: str) -> str:
     return resp.choices[0].message.content.strip()
 
 
+def fix_repetitive_paragraphs(client: OpenAI, chapter_text: str) -> str:
+    """Detect verbatim repeated paragraph blocks and rewrite the duplicates."""
+    paragraphs = [p.strip() for p in chapter_text.split('\n\n') if p.strip()]
+    seen: dict[str, int] = {}
+    has_duplicates = False
+    for para in paragraphs:
+        key = para[:40]
+        if key in seen:
+            has_duplicates = True
+            break
+        seen[key] = 1
+    if not has_duplicates:
+        return chapter_text
+    resp = client.chat.completions.create(
+        model=DEFAULT_MODEL,
+        messages=[{"role": "user", "content":
+            "以下章節中存在逐字重複的段落（同一段文字出現兩次以上）。\n"
+            "請找出所有重複的段落，將第二次及之後出現的改寫成推進場景的新內容：\n"
+            "- 動作要有變化：力道、節奏、角度、深度、速度至少改變一項\n"
+            "- 兩人的反應要有層次推進：情緒升溫、身體變化、對話內容演進\n"
+            "- 不可只換幾個詞，必須寫出真正不同的場景發展\n"
+            "- 第一次出現的段落完全保留不動\n"
+            "- 直接輸出修改後的完整章節正文，不加任何說明或標記\n"
+            "- 必須輸出完整全文，不可截斷或省略\n\n"
+            f"{chapter_text}"
+        }],
+        max_tokens=8000,
+        temperature=0.5,
+    )
+    result = resp.choices[0].message.content.strip()
+    return result if result else chapter_text
+
+
 def fix_sensory_crutches(client: OpenAI, chapter_text: str) -> str:
     """Rewrite overused 她能X到那股Y sensory perception sentences into direct descriptions."""
     import re
