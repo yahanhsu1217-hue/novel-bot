@@ -10,7 +10,7 @@ import streamlit as st
 from openai import OpenAI
 
 from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, LENGTH_CHARS
-from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency, analyze_writing_style
+from generator import stream_chapter, stream_rewrite_chapter, summarize_chapter, extract_story_bible, fix_consistency, analyze_writing_style
 from training import ISSUE_TYPES, add_note, delete_note, load_notes, notes_to_prompt_block
 
 LAST_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_settings.json")
@@ -720,6 +720,53 @@ else:
                                         style_reference=st.session_state.get("w_style_reference", ""))
             st.session_state.chapters[i] = new_text
             st.rerun()
+
+        # ── AI rewrite ────────────────────────────────────────────────────────
+        _rw_preview_key = f"rewrite_preview_{i}"
+        with st.expander("✍️ AI 改寫本章", expanded=_rw_preview_key in st.session_state):
+            _inst_key = f"rewrite_inst_{i}"
+            st.text_area(
+                "改寫指示",
+                key=_inst_key,
+                placeholder="例：把這章結局改成兩人爭吵離場、讓節奏更緊湊、刪掉中間的閒聊加強衝突…",
+                height=80,
+                label_visibility="collapsed",
+            )
+            _rw_btn = st.button("✨ 開始 AI 改寫", key=f"rewrite_btn_{i}", use_container_width=True)
+            _rw_stream_ph = st.empty()
+
+            if _rw_btn:
+                _inst = st.session_state.get(_inst_key, "").strip()
+                if _inst:
+                    _lang = st.session_state.saved_settings.get("language", "繁體中文") if _has_settings else "繁體中文"
+                    _style = st.session_state.get("w_style_reference", "")
+                    _rw_out = ""
+                    for _rw_chunk in stream_rewrite_chapter(client, text, _inst, _lang, _style):
+                        _rw_out += _rw_chunk
+                        _rw_stream_ph.markdown(
+                            f'<div class="chapter-box">{_rw_out}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    st.session_state[_rw_preview_key] = _rw_out
+                    st.rerun()
+                else:
+                    st.warning("請填寫改寫指示")
+
+            if _rw_preview_key in st.session_state:
+                _rw_stream_ph.markdown(
+                    f'<div class="chapter-box">{st.session_state[_rw_preview_key]}</div>',
+                    unsafe_allow_html=True,
+                )
+                _ac_col, _dc_col = st.columns(2)
+                with _ac_col:
+                    if st.button("✅ 套用改寫", key=f"apply_rewrite_{i}", type="primary", use_container_width=True):
+                        st.session_state.chapters[i] = st.session_state.pop(_rw_preview_key)
+                        _save_session()
+                        st.rerun()
+                with _dc_col:
+                    if st.button("✕ 放棄", key=f"discard_rewrite_{i}", use_container_width=True):
+                        del st.session_state[_rw_preview_key]
+                        st.rerun()
 
         with st.expander("🎓 訓練回饋：標記本章問題"):
             _t_excerpt = st.text_area(

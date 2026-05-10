@@ -321,6 +321,49 @@ def _must_appear_block(extra_characters: list[dict], cp_characters: list[dict], 
     )
 
 
+def stream_rewrite_chapter(
+    client: OpenAI,
+    chapter_text: str,
+    instruction: str,
+    language: str = "繁體中文",
+    style_reference: str = "",
+):
+    """Stream an AI rewrite of an existing chapter based on user instructions."""
+    style_block = (
+        f"\n\n【文風要求】\n{style_reference}"
+        if style_reference else ""
+    )
+    system = (
+        "你是一位頂尖的小說編輯與作家。"
+        "你的工作是根據作者的改寫指示修改已有章節。\n"
+        "【核心規則】\n"
+        "- 只修改指示明確要求的部分，其餘段落盡量保留原文字句\n"
+        "- 改寫後必須維持章節的整體連貫性與世界觀邏輯\n"
+        "- 保留原章節的標題格式（如「第X章　標題」）\n"
+        "- 直接輸出改寫後的完整章節正文，不加任何說明、標記或前言"
+    )
+    prompt = (
+        f"輸出語言：{language}\n\n"
+        f"【改寫指示】\n{instruction}\n\n"
+        f"【原始章節】\n{chapter_text}"
+        f"{style_block}"
+    )
+    stream = client.chat.completions.create(
+        model=DEFAULT_MODEL,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user",   "content": prompt},
+        ],
+        max_tokens=8000,
+        temperature=0.72,
+        stream=True,
+    )
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta
+
+
 def stream_chapter(
     client: OpenAI,
     world_mode: str,
