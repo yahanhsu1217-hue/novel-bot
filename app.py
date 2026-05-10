@@ -605,11 +605,12 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
     st.session_state.summaries.append(summary)
     # Merge into story bible
     b = st.session_state.story_bible
-    b["banned_phrases"].extend(bible_update.get("banned_phrases", []))
-    b["used_tropes"].extend(bible_update.get("used_tropes", []))
+    b["banned_phrases"] = (b["banned_phrases"] + bible_update.get("banned_phrases", []))[-40:]
+    b["used_tropes"] = (b["used_tropes"] + bible_update.get("used_tropes", []))[-20:]
     b["open_threads"] = bible_update.get("open_threads", b["open_threads"])
-    # Accumulate established facts (newer facts override older ones for same subject)
-    b.setdefault("established_facts", []).extend(bible_update.get("established_facts", []))
+    # Accumulate established facts (cap at 40 to prevent prompt bloat)
+    b.setdefault("established_facts", [])
+    b["established_facts"] = (b["established_facts"] + bible_update.get("established_facts", []))[-40:]
     _save_session()
     return full_text
 

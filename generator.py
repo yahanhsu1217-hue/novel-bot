@@ -412,7 +412,10 @@ def stream_chapter(
 
     history_block = ""
     if prev_summaries:
-        lines = "\n".join(f"第 {i+1} 章：{s}" for i, s in enumerate(prev_summaries))
+        # Only pass the most recent 5 summaries to prevent prompt bloat
+        recent = prev_summaries[-5:]
+        start_idx = len(prev_summaries) - len(recent)
+        lines = "\n".join(f"第 {start_idx+i+1} 章：{s}" for i, s in enumerate(recent))
         history_block = (
             f"【前面章節記錄（新章節必須與以下內容完全不同）】\n"
             f"嚴格禁止：重複相同情節走向、橋段類型、對話模式、描寫詞彙、句型結構。\n"
@@ -425,10 +428,12 @@ def stream_chapter(
     if story_bible:
         parts = []
         if story_bible.get("banned_phrases"):
-            phrases = "\n".join(f"- {p}" for p in story_bible["banned_phrases"])
+            # Cap to most recent 30 to avoid prompt bloat
+            phrases = "\n".join(f"- {p}" for p in story_bible["banned_phrases"][-30:])
             parts.append(f"【絕對禁止重複使用的語句（逐字禁用）】\n{phrases}")
         if story_bible.get("used_tropes"):
-            tropes = "\n".join(f"- {t}" for t in story_bible["used_tropes"])
+            # Cap to most recent 20 to avoid prompt bloat
+            tropes = "\n".join(f"- {t}" for t in story_bible["used_tropes"][-20:])
             parts.append(
                 f"【已用過的套路 — 絕對禁止重複，連結構相似的版本都不行】\n"
                 f"以下套路已出現，後續章節處理相似情境時，必須從敘事結構根本上做出改變：\n"
@@ -497,6 +502,13 @@ def stream_chapter(
             f"- 基調是整體方向，不是每一秒都要強調；在日常互動中自然滲透，而非硬套"
         )
 
+    length_block = (
+        f"【⚠️ 字數強制規定 — 必須達標，否則視為失敗】\n"
+        f"- 本章目標字數：{target} 字，必須完整寫滿，不可草率收尾或提前結束\n"
+        f"- 禁止用幾句話帶過場景；每個時刻都要完整展開，細節豐富，直到達標為止\n"
+        f"- 字數不足即視為失敗，必須繼續寫直到達到 {target} 字"
+    )
+
     style_block = ""
     if style_reference:
         style_block = (
@@ -509,8 +521,7 @@ def stream_chapter(
             "- 凡覺得可以略過之處，正是必須大篇幅展開的地方，不可有任何省略\n"
             "- 嚴禁「隨後」「不久後」「過了一會兒」「稍後」「片刻後」「沒多久」等跳躍詞；必須寫出完整過程\n"
             "- 情緒透過身體感受呈現（心跳、呼吸、皮膚反應、肌肉張力），嚴禁直接陳述情緒\n"
-            "- 動詞必須有力精準，嚴禁「走」「說」「看」「感到」「覺得」等平淡動詞\n"
-            f"- 目標字數 {target} 字，寫滿為止，不足即失敗，必須重寫"
+            "- 動詞必須有力精準，嚴禁「走」「說」「看」「感到」「覺得」等平淡動詞"
         )
 
     setting_block = "\n".join(filter(None, [
@@ -563,13 +574,13 @@ def stream_chapter(
 
 輸出語言：{language}
 {pov_instruction}
-目標字數：{target} 字
 {progress_note}
 
 【我的背景故事】
 {background}
 
 請創作第一章，建立世界氛圍與角色，帶出故事開端{"，給出完整結局。" if is_final else "，結尾留下讓人想繼續讀的鉤子。"}
+{length_block}
 {style_block}
 {directive_block}
 直接輸出故事正文，格式如下：
@@ -578,7 +589,7 @@ def stream_chapter(
 
 （正文）"""
     else:
-        context = prev_chapter_text[-2500:] if len(prev_chapter_text) > 2500 else prev_chapter_text
+        context = prev_chapter_text[-3000:] if len(prev_chapter_text) > 3000 else prev_chapter_text
         ending_instruction = (
             "請將故事帶向完整結局，收束所有主線與情感線，給讀者滿足感。"
             if is_final else
@@ -589,13 +600,13 @@ def stream_chapter(
 
 輸出語言：{language}
 {pov_instruction}
-目標字數：{target} 字
 {progress_note}
 
 【上一章結尾】
 {context}
 
 {ending_instruction}
+{length_block}
 {style_block}
 {directive_block}
 直接輸出故事正文，格式如下：
