@@ -41,23 +41,23 @@ def extract_story_bible(client: OpenAI, chapter_text: str, chapter_num: int) -> 
 
 
 def analyze_writing_style(client: OpenAI, sample_text: str) -> str:
-    """Analyze a writing sample and return a style description for use in prompts."""
+    """Analyze a writing sample and return actionable style rules with concrete examples."""
     resp = client.chat.completions.create(
         model=DEFAULT_MODEL,
         messages=[{"role": "user", "content":
-            "請分析以下文章的寫作風格特色，輸出一段連貫說明（不要分點標題），"
-            "具體描述並引用原文詞語或句子佐證，涵蓋以下面向：\n"
-            "句子節奏（短促有力？長句迴旋？混合節奏？）、"
-            "動詞的力度與精準度（舉代表性動詞，說明為何這些動詞有效）、"
-            "形容詞密度（稀疏精準？密集堆疊？）、"
-            "感官描寫方式（最常用哪種感官？如何具體呈現觸覺、溫度、氣味？）、"
-            "時間過渡手法（如何處理時間流逝？是否展開過程而非跳躍？）、"
-            "情緒呈現方式（直述情緒？透過肢體動作？透過環境細節？）、"
-            "整體文字密度（每句話的信息量高低）。\n\n"
-            "分析目標：讓另一位作者能照此密度和選字精準度寫出相似質感的文字。\n\n"
+            "請分析以下文章的寫作風格，輸出可直接讓另一位作者照做的具體規則清單。\n"
+            "每條規則必須：①說明做法 ②從原文引用一個實際句子作為示範。\n\n"
+            "涵蓋以下面向（每項都要有原文引用）：\n"
+            "1. 句子長度與標點密度：這篇文章的句子平均多長？怎麼斷句？引用一句最有代表性的。\n"
+            "2. 動詞選擇：這篇用了哪些有力的動詞？引用兩到三個，說明它們比平淡動詞強在哪裡。\n"
+            "3. 感官描寫：這篇怎麼呈現觸覺/溫度/聲音？引用一句感官描寫句，說明它具體在哪裡。\n"
+            "4. 情緒呈現：角色情緒怎麼表達？直述？肢體？環境？引用一句示範。\n"
+            "5. 時間推進：場景如何從A過渡到B？引用一個時間過渡的寫法。\n"
+            "6. 整體禁忌：這篇明顯迴避了哪些寫法（例如從不直接說「她感到緊張」、從不用「那股」開頭）？\n\n"
+            "格式：每一條直接給規則+引用，不要加長篇解釋。目的是讓模型模仿，不是讓人讀懂。\n\n"
             f"{sample_text}"
         }],
-        max_tokens=900,
+        max_tokens=1200,
         temperature=0.2,
     )
     return resp.choices[0].message.content.strip()

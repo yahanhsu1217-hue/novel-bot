@@ -449,7 +449,11 @@ with st.sidebar:
         if _sample:
             with st.spinner("分析文風中…"):
                 _analysis = analyze_writing_style(client, _sample)
-                st.session_state["w_style_reference"] = _analysis
+                _excerpt = _sample[:600].strip()
+                st.session_state["w_style_reference"] = (
+                    f"【參考原文節錄 — 直接照此句子長度、標點密度、動詞力度寫作】\n{_excerpt}\n\n"
+                    f"【文風分析】\n{_analysis}"
+                )
             st.rerun()
         else:
             st.warning("請先貼上參考文章片段")
