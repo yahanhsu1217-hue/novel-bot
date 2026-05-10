@@ -66,7 +66,7 @@ def analyze_writing_style(client: OpenAI, sample_text: str) -> str:
 def fix_repetitive_paragraphs(client: OpenAI, chapter_text: str) -> str:
     """Detect verbatim repeated paragraph blocks and rewrite the duplicates."""
     paragraphs = [p.strip() for p in chapter_text.split('\n\n') if p.strip()]
-    seen: dict[str, int] = {}
+    seen: dict = {}
     has_duplicates = False
     for para in paragraphs:
         key = para[:40]
