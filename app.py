@@ -233,6 +233,33 @@ with st.sidebar:
 
     st.divider()
 
+    # ── Novel file upload ─────────────────────────────────────────────────────
+    st.markdown("### 📂 載入已下載文章")
+    st.caption("上傳之前下載的 .txt，可繼續改寫或重新生成")
+    _novel_file = st.file_uploader(
+        "上傳 .txt 文章", type="txt", key="novel_file_upload",
+        label_visibility="collapsed",
+    )
+    if _novel_file and _novel_file.name != st.session_state.get("_last_novel_upload"):
+        _raw = _novel_file.read().decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        _parsed = [c.strip() for c in _raw.split("\n\n\n") if c.strip()]
+        if _parsed:
+            st.session_state.chapters    = _parsed
+            st.session_state.summaries   = []
+            st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": []}
+            st.session_state.story_started = True
+            st.session_state["_last_novel_upload"] = _novel_file.name
+            try:
+                with open(LAST_SESSION_FILE, "w", encoding="utf-8") as _sf:
+                    json.dump({"chapters": _parsed, "summaries": [], "story_bible": st.session_state.story_bible, "saved_settings": st.session_state.saved_settings}, _sf, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+            st.rerun()
+        else:
+            st.error("無法解析文章，請確認格式正確")
+
+    st.divider()
+
     # ── World setting ─────────────────────────────────────────────────────────
     st.markdown("### 🌍 世界設定")
     world_mode = st.radio(
@@ -633,17 +660,57 @@ if not st.session_state.chapters:
 """, unsafe_allow_html=True)
 else:
     s = st.session_state.saved_settings
-    world_label = f"《{s['world_input']}》" if s["world_mode"] == "作品世界" else s["world_input"][:30] + "…"
-    _cp_names = "、".join(c["name"] for c in s.get("cp_characters", []) if c.get("name", "").strip())
-    cp_label = f"♡ {_cp_names}" if s["cp_type"] == "我 × 角色" and _cp_names else "無 CP"
-    st.markdown(f"**{world_label}**　·　{s['name']}　·　{s['language']}　·　{s['length_label']}　·　{cp_label}")
+    _has_settings = bool(s.get("world_input", ""))
+    if _has_settings:
+        world_label = f"《{s['world_input']}》" if s["world_mode"] == "作品世界" else s["world_input"][:30] + "…"
+        _cp_names = "、".join(c["name"] for c in s.get("cp_characters", []) if c.get("name", "").strip())
+        cp_label = f"♡ {_cp_names}" if s["cp_type"] == "我 × 角色" and _cp_names else "無 CP"
+        st.markdown(f"**{world_label}**　·　{s['name']}　·　{s['language']}　·　{s['length_label']}　·　{cp_label}")
+    else:
+        st.info("已載入文章。若需要 AI 重新生成，請一併在左側載入設定檔（.json）。")
     st.caption(f"共 {len(st.session_state.chapters)} 章")
     st.divider()
 
     for i, text in enumerate(st.session_state.chapters):
         st.markdown(f"## 第 {i + 1} 章")
         st.markdown(f'<div class="chapter-box">{text}</div>', unsafe_allow_html=True)
-        if st.button("🔄 重新生成本章", key=f"regen_{i}", use_container_width=True):
+
+        _regen_col, _edit_col = st.columns(2)
+        with _regen_col:
+            _regen_btn = st.button(
+                "🔄 重新生成本章", key=f"regen_{i}", use_container_width=True,
+                disabled=not _has_settings,
+            )
+        with _edit_col:
+            _edit_btn = st.button("✏️ 改寫本章", key=f"edit_toggle_{i}", use_container_width=True)
+
+        if _edit_btn:
+            _cur = st.session_state.get(f"editing_{i}", False)
+            st.session_state[f"editing_{i}"] = not _cur
+            st.rerun()
+
+        if st.session_state.get(f"editing_{i}", False):
+            with st.container():
+                _edited_text = st.text_area(
+                    "編輯章節內容",
+                    value=text,
+                    key=f"edit_area_{i}",
+                    height=500,
+                    label_visibility="collapsed",
+                )
+                _save_col, _cancel_col = st.columns(2)
+                with _save_col:
+                    if st.button("💾 儲存改寫", key=f"save_edit_{i}", type="primary", use_container_width=True):
+                        st.session_state.chapters[i] = _edited_text
+                        st.session_state[f"editing_{i}"] = False
+                        _save_session()
+                        st.rerun()
+                with _cancel_col:
+                    if st.button("✕ 取消", key=f"cancel_edit_{i}", use_container_width=True):
+                        st.session_state[f"editing_{i}"] = False
+                        st.rerun()
+
+        if _regen_btn:
             s = st.session_state.saved_settings
             prev_text = st.session_state.chapters[i - 1] if i > 0 else ""
             is_last = i == len(st.session_state.chapters) - 1
@@ -653,6 +720,7 @@ else:
                                         style_reference=st.session_state.get("w_style_reference", ""))
             st.session_state.chapters[i] = new_text
             st.rerun()
+
         with st.expander("🎓 訓練回饋：標記本章問題"):
             _t_excerpt = st.text_area(
                 "貼上有問題的段落（可留空）",
@@ -682,6 +750,8 @@ else:
 
     # ── Continue / Ending buttons ─────────────────────────────────────────────
     if st.session_state.story_started:
+        if not _has_settings:
+            st.warning("載入設定檔（.json）後，才能使用 AI 繼續生成下一章或結局。")
         st.markdown("#### 📌 下一章特別指示")
         st.text_area(
             "下一章特別指示", key=f"next_dir_{st.session_state._dir_ver}",
@@ -690,9 +760,9 @@ else:
         )
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
-            continue_btn = st.button("➡️ 繼續下一章", type="primary", use_container_width=True)
+            continue_btn = st.button("➡️ 繼續下一章", type="primary", use_container_width=True, disabled=not _has_settings)
         with btn_col2:
-            ending_btn = st.button("🎬 寫結局", use_container_width=True)
+            ending_btn = st.button("🎬 寫結局", use_container_width=True, disabled=not _has_settings)
 
         if continue_btn:
             s = st.session_state.saved_settings
