@@ -63,6 +63,35 @@ def analyze_writing_style(client: OpenAI, sample_text: str) -> str:
     return resp.choices[0].message.content.strip()
 
 
+def fix_sensory_crutches(client: OpenAI, chapter_text: str) -> str:
+    """Rewrite overused 她能X到那股Y sensory perception sentences into direct descriptions."""
+    import re
+    count = len(re.findall(r'她能[^\s，。！？]{1,4}到', chapter_text))
+    if count <= 3:
+        return chapter_text
+    resp = client.chat.completions.create(
+        model=DEFAULT_MODEL,
+        messages=[{"role": "user", "content":
+            f"以下章節中，「她能X到」（如「她能感覺到」「她能聽到」「她能聞到」「她能看到」）的句式出現了 {count} 次，嚴重超標。\n"
+            "請找出所有這類句子，逐一改寫為直接以名詞或動詞切入的句子，不透過感知動詞中繼。\n\n"
+            "改寫原則：\n"
+            "- 以發出感覺的物體、聲音、氣味、動作本身為主詞，直接描述它的狀態\n"
+            "- ✗「她能感覺到那股濕潤——愛液在擴散」→ ✓「愛液粘在皮膚上，涼的，帶著腥甜」\n"
+            "- ✗「她能聽到那股聲音——腳步聲傳來」→ ✓「腳步聲從走廊傳來，很輕，刻意壓低的」\n"
+            "- ✗「她能感覺到那股視線——Dalon Tsai的目光落在她身上」→ ✓「Dalon Tsai的目光停在她身上，不動」\n"
+            "- 每句改寫後必須保留原句的信息，不可刪除內容\n"
+            "- 只改「她能X到」的句子，其餘文字完全不動\n"
+            "- 直接輸出修改後的完整章節正文，不加任何說明或標記\n"
+            "- 必須輸出完整全文，不可截斷\n\n"
+            f"{chapter_text}"
+        }],
+        max_tokens=8000,
+        temperature=0.3,
+    )
+    result = resp.choices[0].message.content.strip()
+    return result if result else chapter_text
+
+
 def fix_consistency(client: OpenAI, chapter_text: str, protagonist_name: str = "", extra_names: list[str] | None = None, nickname: str = "") -> str:
     """Scan chapter for internal contradictions (location, numbers, facts) and fix them."""
     name_rules = []
