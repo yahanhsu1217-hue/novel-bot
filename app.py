@@ -260,6 +260,61 @@ with st.sidebar:
 
     st.divider()
 
+    # ── Name replacer ─────────────────────────────────────────────────────────
+    st.markdown("### 🔤 名字替換工具")
+    st.caption("上傳任意 .txt，批量替換角色名字後下載")
+    _rn_file = st.file_uploader(
+        "上傳要替換名字的文章", type="txt", key="rename_file_upload",
+        label_visibility="collapsed",
+    )
+    if _rn_file and _rn_file.name != st.session_state.get("_last_rn_upload"):
+        st.session_state["_rn_text"] = _rn_file.read().decode("utf-8")
+        st.session_state["_rn_filename"] = _rn_file.name
+        st.session_state["_last_rn_upload"] = _rn_file.name
+        st.session_state.pop("_rn_result", None)
+
+    if st.session_state.get("_rn_text"):
+        st.caption(f"已載入：{st.session_state['_rn_filename']}（{len(st.session_state['_rn_text'])} 字）")
+        if "num_rn_pairs" not in st.session_state:
+            st.session_state["num_rn_pairs"] = 2
+        _rn_col1, _rn_col2 = st.columns(2)
+        with _rn_col1:
+            if st.button("＋ 新增替換", use_container_width=True):
+                st.session_state["num_rn_pairs"] += 1
+        with _rn_col2:
+            if st.button("－ 移除替換", use_container_width=True,
+                         disabled=st.session_state["num_rn_pairs"] <= 1):
+                st.session_state["num_rn_pairs"] -= 1
+        _rn_pairs = []
+        for _ri in range(st.session_state["num_rn_pairs"]):
+            _rc1, _rc2 = st.columns(2)
+            with _rc1:
+                _old = st.text_input("原名字", key=f"rn_old_{_ri}", placeholder="原名字")
+            with _rc2:
+                _new = st.text_input("新名字", key=f"rn_new_{_ri}", placeholder="新名字")
+            if _old.strip() and _new.strip():
+                _rn_pairs.append((_old.strip(), _new.strip()))
+        if st.button("✨ 執行替換", type="primary", use_container_width=True,
+                     disabled=not _rn_pairs):
+            _rn_out = st.session_state["_rn_text"]
+            for _old, _new in _rn_pairs:
+                _rn_out = _rn_out.replace(_old, _new)
+            st.session_state["_rn_result"] = _rn_out
+            _replaced_count = sum(
+                st.session_state["_rn_text"].count(_old) for _old, _ in _rn_pairs
+            )
+            st.success(f"完成，共替換 {_replaced_count} 處")
+        if st.session_state.get("_rn_result"):
+            st.download_button(
+                "⬇️ 下載替換後的文章",
+                data=st.session_state["_rn_result"],
+                file_name=st.session_state.get("_rn_filename", "renamed.txt"),
+                mime="text/plain",
+                use_container_width=True,
+            )
+
+    st.divider()
+
     # ── World setting ─────────────────────────────────────────────────────────
     st.markdown("### 🌍 世界設定")
     world_mode = st.radio(
