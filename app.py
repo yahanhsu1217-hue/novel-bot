@@ -262,9 +262,15 @@ with st.sidebar:
 
     # ── Name replacer ─────────────────────────────────────────────────────────
     st.markdown("### 🔤 名字替換工具")
-    st.caption("上傳任意 .txt，批量替換角色名字後下載")
+    st.caption("貼上文章或上傳 .txt，批量替換角色名字後下載")
+    _rn_pasted = st.text_area(
+        "貼上文章內容", key="rn_paste_area",
+        placeholder="直接將文章內容貼到這裡…",
+        height=160, label_visibility="collapsed",
+    )
+    st.caption("或上傳 .txt 檔案：")
     _rn_file = st.file_uploader(
-        "上傳要替換名字的文章", type="txt", key="rename_file_upload",
+        "上傳 .txt", type="txt", key="rename_file_upload",
         label_visibility="collapsed",
     )
     if _rn_file and _rn_file.name != st.session_state.get("_last_rn_upload"):
@@ -273,8 +279,11 @@ with st.sidebar:
         st.session_state["_last_rn_upload"] = _rn_file.name
         st.session_state.pop("_rn_result", None)
 
-    if st.session_state.get("_rn_text"):
-        st.caption(f"已載入：{st.session_state['_rn_filename']}（{len(st.session_state['_rn_text'])} 字）")
+    _rn_source = _rn_pasted.strip() or st.session_state.get("_rn_text", "")
+    _rn_fname = st.session_state.get("_rn_filename", "renamed.txt") if not _rn_pasted.strip() else "renamed.txt"
+
+    if _rn_source:
+        st.caption(f"文章長度：{len(_rn_source)} 字")
         if "num_rn_pairs" not in st.session_state:
             st.session_state["num_rn_pairs"] = 2
         _rn_col1, _rn_col2 = st.columns(2)
@@ -296,19 +305,17 @@ with st.sidebar:
                 _rn_pairs.append((_old.strip(), _new.strip()))
         if st.button("✨ 執行替換", type="primary", use_container_width=True,
                      disabled=not _rn_pairs):
-            _rn_out = st.session_state["_rn_text"]
+            _rn_out = _rn_source
             for _old, _new in _rn_pairs:
                 _rn_out = _rn_out.replace(_old, _new)
             st.session_state["_rn_result"] = _rn_out
-            _replaced_count = sum(
-                st.session_state["_rn_text"].count(_old) for _old, _ in _rn_pairs
-            )
+            _replaced_count = sum(_rn_source.count(_old) for _old, _ in _rn_pairs)
             st.success(f"完成，共替換 {_replaced_count} 處")
         if st.session_state.get("_rn_result"):
             st.download_button(
                 "⬇️ 下載替換後的文章",
                 data=st.session_state["_rn_result"],
-                file_name=st.session_state.get("_rn_filename", "renamed.txt"),
+                file_name=_rn_fname,
                 mime="text/plain",
                 use_container_width=True,
             )
