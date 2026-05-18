@@ -835,10 +835,16 @@ else:
                 height=80,
                 label_visibility="collapsed",
             )
+            st.checkbox(
+                "以此指示作為本章結尾（AI 寫到指示事件後立即收章）",
+                key=f"rewrite_as_ending_{i}",
+            )
             if st.button("✨ 依指示重新生成", key=f"rewrite_btn_{i}",
                          use_container_width=True, disabled=not _has_settings):
                 _inst = st.session_state.get(_inst_key, "").strip()
                 if _inst:
+                    if st.session_state.get(f"rewrite_as_ending_{i}", False):
+                        _inst += _DIRECTIVE_AS_ENDING_RULE
                     _s = st.session_state.saved_settings
                     _prev = st.session_state.chapters[i - 1] if i > 0 else ""
                     _is_last = i == len(st.session_state.chapters) - 1
