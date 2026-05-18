@@ -760,8 +760,13 @@ def stream_chapter(
             if is_final else
             "請自然銜接上一章，推進情節，帶出新的發展或衝突，結尾留下鉤子。"
         )
-        memory_section = f"\n{memory_block}\n" if memory_block else ""
-        prompt = f"""{directive_block + chr(10) + chr(10) if directive_block else ""}故事設定：
+        memory_header = (
+            f"【⚠️ 故事記憶 — 在讀任何其他內容之前，先完整讀完以下所有記錄，寫作時必須全部遵守】\n"
+            f"{memory_block}\n"
+            f"【以上記憶讀完，方可繼續閱讀下方設定與規則】\n"
+        ) if memory_block else ""
+        prompt = f"""{memory_header}
+{directive_block + chr(10) if directive_block else ""}故事設定：
 {setting_block}
 
 輸出語言：{language}
@@ -771,7 +776,7 @@ def stream_chapter(
 {ending_instruction}
 {length_block}
 {style_block}
-{directive_block}{memory_section}
+{directive_block}
 【⚠️ 上一章結尾 — 強制執行以下兩條，違反即失敗】
 1. 本章開場必須直接承接以下最後一幕的時間點與地點，不可跳過或無視
 2. 角色所在地點與上一章結尾一致；若需換場景，必須在正文中明確交代移動過程

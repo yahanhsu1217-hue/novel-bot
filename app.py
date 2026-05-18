@@ -730,7 +730,7 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
     b["open_threads"] = bible_update.get("open_threads", b["open_threads"])
     # Accumulate established facts (cap at 40 to prevent prompt bloat)
     b.setdefault("established_facts", [])
-    b["established_facts"] = (b["established_facts"] + bible_update.get("established_facts", []))[-40:]
+    b["established_facts"] = (b["established_facts"] + bible_update.get("established_facts", []))[-80:]
     _save_session()
     return full_text
 
