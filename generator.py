@@ -16,7 +16,7 @@ def summarize_chapter(client: OpenAI, chapter_text: str, chapter_num: int) -> tu
         messages=[{"role": "user", "content":
             f"分析第 {chapter_num} 章，只輸出 JSON，不要其他文字：\n"
             f"{{\n"
-            f'  "summary": "300字內條列：①關鍵事件與結果 ②角色當前位置與狀態 ③情感進展與關係變化 ④尚未解決的衝突或伏筆 ⑤重要決策與後果",\n'
+            f'  "summary": "300字內條列（省略性愛場景細節，只記主線）：①關鍵事件與結果 ②角色當前位置與狀態 ③情感進展與關係變化 ④尚未解決的衝突或伏筆 ⑤重要決策與後果",\n'
             f'  "banned_phrases": ["逐字列出本章出現、後續不可重複的具體語句或句型，至少5條"],\n'
             f'  "used_tropes": ["本章使用的情感或劇情套路"],\n'
             f'  "open_threads": ["尚未解決的伏筆或承諾，例如某角色說有話要說但未說"],\n'
@@ -38,6 +38,38 @@ def summarize_chapter(client: OpenAI, chapter_text: str, chapter_num: int) -> tu
 def extract_story_bible(client: OpenAI, chapter_text: str, chapter_num: int) -> dict:
     _, bible = summarize_chapter(client, chapter_text, chapter_num)
     return bible
+
+
+def compress_old_summaries(
+    client: OpenAI,
+    existing_overview: str,
+    old_summaries: list[str],
+    chapter_start: int = 1,
+) -> str:
+    """Merge old chapter summaries into a concise early-story overview. Omits NSFW details."""
+    if not old_summaries and not existing_overview:
+        return ""
+    parts = []
+    if existing_overview:
+        parts.append(f"【現有早期總覽】\n{existing_overview}")
+    if old_summaries:
+        lines = "\n".join(f"第 {chapter_start + i} 章：{s}" for i, s in enumerate(old_summaries))
+        parts.append(f"【待合併章節摘要】\n{lines}")
+    resp = client.chat.completions.create(
+        model=DEFAULT_MODEL,
+        messages=[{"role": "user", "content":
+            "請將以下早期章節摘要合併為一段簡潔的「早期故事總覽」，供後續章節生成時參考。\n\n"
+            "規則：\n"
+            "- 只保留：主線情節走向、角色當前位置與狀態、重要關係變化、關鍵決策與後果、尚未解決的伏筆\n"
+            "- 完全省略：性愛場景細節、親密接觸的具體描寫；若有相關情節，只寫「兩人關係進一步發展」等概括詞\n"
+            "- 輸出格式：條列式，每項以「・」開頭，總長約 200-400 字\n"
+            "- 直接輸出總覽內容，不加標題、前言或說明\n\n"
+            + "\n\n".join(parts)
+        }],
+        max_tokens=800,
+        temperature=0.2,
+    )
+    return resp.choices[0].message.content.strip()
 
 
 def analyze_writing_style(client: OpenAI, sample_text: str) -> str:
@@ -548,6 +580,8 @@ def stream_chapter(
     style_reference: str = "",
     love_tone: str = "",
     pacing: str = "",
+    early_overview: str = "",
+    summary_offset: int = 0,
 ):
     target = LENGTH_CHARS.get(length_label, 2000)
 
@@ -566,11 +600,18 @@ def stream_chapter(
         # Only pass the most recent 8 summaries to prevent prompt bloat
         recent = prev_summaries[-8:]
         start_idx = len(prev_summaries) - len(recent)
-        lines = "\n".join(f"第 {start_idx+i+1} 章：{s}" for i, s in enumerate(recent))
+        lines = "\n".join(f"第 {summary_offset + start_idx + i + 1} 章：{s}" for i, s in enumerate(recent))
+        overview_section = ""
+        if early_overview:
+            overview_section = (
+                f"【早期故事總覽（第 1～{summary_offset} 章）— 必須記住，不可違背】\n"
+                f"{early_overview}\n\n"
+            )
         history_block = (
             f"【⚠️ 故事歷程記錄 — 這是你必須記住的完整故事背景，不可遺忘或自相矛盾】\n"
             f"以下是故事至今每一章的關鍵進展。新章節必須在此基礎上延續，"
             f"所有已發生的事件、已確立的關係、已做出的決策，在後續章節中必須持續有效：\n\n"
+            f"{overview_section}"
             f"{lines}\n\n"
             f"【禁止】在不同章節中讓相同情節或對話重複發生；"
             f"【禁止】無故換地點——若需移動場景，必須在正文中明確交代移動過程。"

@@ -11,7 +11,7 @@ import streamlit.components.v1 as components
 from openai import OpenAI
 
 from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, LENGTH_CHARS
-from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency, fix_sensory_crutches, fix_repetitive_paragraphs, analyze_writing_style, STYLE_PRESETS
+from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency, fix_sensory_crutches, fix_repetitive_paragraphs, analyze_writing_style, STYLE_PRESETS, compress_old_summaries
 from training import ISSUE_TYPES, add_note, delete_note, load_notes, notes_to_prompt_block
 
 LAST_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_settings.json")
@@ -89,10 +89,12 @@ if "_settings_initialized" not in st.session_state:
     try:
         with open(LAST_SESSION_FILE, encoding="utf-8") as _f:
             _sess = json.load(_f)
-        st.session_state["chapters"]      = _sess.get("chapters", [])
-        st.session_state["summaries"]     = _sess.get("summaries", [])
-        st.session_state["story_bible"]   = _sess.get("story_bible", {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": []})
-        st.session_state["saved_settings"] = _sess.get("saved_settings", {})
+        st.session_state["chapters"]              = _sess.get("chapters", [])
+        st.session_state["summaries"]             = _sess.get("summaries", [])
+        st.session_state["story_bible"]           = _sess.get("story_bible", {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": []})
+        st.session_state["saved_settings"]        = _sess.get("saved_settings", {})
+        st.session_state["early_overview"]        = _sess.get("early_overview", "")
+        st.session_state["early_overview_through"] = _sess.get("early_overview_through", 0)
         if st.session_state["chapters"]:
             st.session_state["story_started"] = True
     except Exception:
@@ -131,7 +133,9 @@ for k, v in [
     ("w_nsfw",            False),
     ("w_style_sample",    ""),
     ("w_style_reference", ""),
-    ("w_next_next_dir",   ""),
+    ("w_next_next_dir",        ""),
+    ("early_overview",         ""),
+    ("early_overview_through", 0),
     ("_dir_ver", 0),
 ]:
     if k not in st.session_state:
@@ -635,10 +639,12 @@ def _collect_settings() -> dict:
 def _save_session():
     try:
         data = {
-            "chapters":      st.session_state.chapters,
-            "summaries":     st.session_state.summaries,
-            "story_bible":   st.session_state.story_bible,
-            "saved_settings": st.session_state.saved_settings,
+            "chapters":              st.session_state.chapters,
+            "summaries":             st.session_state.summaries,
+            "story_bible":           st.session_state.story_bible,
+            "saved_settings":        st.session_state.saved_settings,
+            "early_overview":        st.session_state.get("early_overview", ""),
+            "early_overview_through": st.session_state.get("early_overview_through", 0),
         }
         with open(LAST_SESSION_FILE, "w", encoding="utf-8") as _f:
             json.dump(data, _f, ensure_ascii=False, indent=2)
@@ -672,6 +678,10 @@ def _trim_to_original_end(original: str, processed: str, slack: int = 60) -> str
     return processed[:target].rstrip()
 
 
+_COMPRESS_THRESHOLD = 12
+_RECENT_KEEP = 8
+
+
 def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_final: bool = False, directive: str = "", style_reference: str = "", preserve_ending: bool = False):
     full_text = ""
     placeholder = st.empty()
@@ -685,6 +695,8 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
         training_notes=load_notes(),
         chapter_directive=directive,
         style_reference=style_reference,
+        early_overview=st.session_state.get("early_overview", ""),
+        summary_offset=st.session_state.get("early_overview_through", 0),
         **settings,
     ):
         full_text += chunk
@@ -723,6 +735,17 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
     with st.spinner("📝 記錄章節記憶…"):
         summary, bible_update = summarize_chapter(client, full_text, chapter_num)
     st.session_state.summaries.append(summary)
+    # Compress old summaries when list grows beyond threshold
+    if len(st.session_state.summaries) > _COMPRESS_THRESHOLD:
+        _old = st.session_state.summaries[:-_RECENT_KEEP]
+        _existing_ov = st.session_state.get("early_overview", "")
+        _ov_through = st.session_state.get("early_overview_through", 0)
+        with st.spinner("📚 壓縮早期章節記憶…"):
+            st.session_state.early_overview = compress_old_summaries(
+                client, _existing_ov, _old, chapter_start=_ov_through + 1
+            )
+        st.session_state.early_overview_through = _ov_through + len(_old)
+        st.session_state.summaries = st.session_state.summaries[-_RECENT_KEEP:]
     # Merge into story bible
     b = st.session_state.story_bible
     b["banned_phrases"] = (b["banned_phrases"] + bible_update.get("banned_phrases", []))[-40:]
@@ -750,6 +773,8 @@ if start_btn:
     st.session_state.chapters = []
     st.session_state.summaries = []
     st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": []}
+    st.session_state.early_overview = ""
+    st.session_state.early_overview_through = 0
     st.session_state.saved_settings = s
     try:
         os.remove(LAST_SESSION_FILE)
@@ -795,7 +820,78 @@ else:
     st.caption(f"共 {len(st.session_state.chapters)} 章")
     st.divider()
 
-    for i, text in enumerate(st.session_state.chapters):
+    _tab_chapters, _tab_summaries = st.tabs(["📖 章節", "📝 摘要管理"])
+
+    with _tab_summaries:
+        st.markdown("#### 📝 章節摘要管理")
+        st.caption("AI 自動生成的摘要，供後續章節生成時參考。可直接修改，避免 AI 誤記。")
+        _ov_through = st.session_state.get("early_overview_through", 0)
+        if st.session_state.get("early_overview"):
+            st.markdown(f"**早期故事總覽（第 1～{_ov_through} 章）**")
+            _ov_val = st.text_area(
+                "早期故事總覽",
+                value=st.session_state.early_overview,
+                key="_edit_early_ov",
+                height=200,
+                label_visibility="collapsed",
+            )
+            if st.button("💾 儲存早期總覽", key="_save_early_ov"):
+                st.session_state.early_overview = _ov_val
+                _save_session()
+                st.success("已儲存")
+            st.divider()
+        if st.session_state.summaries:
+            for _si, _sval in enumerate(st.session_state.summaries):
+                _ch_label = f"第 {_ov_through + _si + 1} 章摘要"
+                with st.expander(_ch_label, expanded=False):
+                    _edited_s = st.text_area(
+                        "摘要內容",
+                        value=_sval,
+                        key=f"_sum_edit_{_si}",
+                        height=160,
+                        label_visibility="collapsed",
+                    )
+                    if st.button("💾 儲存", key=f"_save_sum_{_si}"):
+                        st.session_state.summaries[_si] = _edited_s
+                        _save_session()
+                        st.success("已儲存")
+        elif not st.session_state.get("early_overview"):
+            st.caption("尚無摘要。生成章節後自動記錄。")
+
+        st.divider()
+        st.markdown("#### 📚 故事資料庫管理")
+        st.caption("若 AI 記錯了事實（如角色位置、能力狀態），可在此直接修改或刪除，下次生成時立即生效。刪除已移除角色的相關條目，可防止 AI 繼續引用。")
+        _b = st.session_state.story_bible
+        with st.expander("已確立的故事事實 (established_facts)", expanded=False):
+            _ef_text = "\n".join(_b.get("established_facts", []))
+            _ef_edited = st.text_area(
+                "每行一條事實",
+                value=_ef_text,
+                key="_edit_ef",
+                height=200,
+                label_visibility="collapsed",
+                placeholder="每行一條，例如：\n主角目前在機場\nDalon目前在辦公室\n主角不知道Dalon的秘密",
+            )
+            if st.button("💾 儲存事實", key="_save_ef"):
+                _b["established_facts"] = [l.strip() for l in _ef_edited.split("\n") if l.strip()]
+                _save_session()
+                st.success("已儲存")
+        with st.expander("未解決的伏筆 (open_threads)", expanded=False):
+            _ot_text = "\n".join(_b.get("open_threads", []))
+            _ot_edited = st.text_area(
+                "每行一條伏筆",
+                value=_ot_text,
+                key="_edit_ot",
+                height=120,
+                label_visibility="collapsed",
+            )
+            if st.button("💾 儲存伏筆", key="_save_ot"):
+                _b["open_threads"] = [l.strip() for l in _ot_edited.split("\n") if l.strip()]
+                _save_session()
+                st.success("已儲存")
+
+    with _tab_chapters:
+     for i, text in enumerate(st.session_state.chapters):
         st.markdown(f'<div id="ch-{i}"></div>', unsafe_allow_html=True)
         st.markdown(f"## 第 {i + 1} 章")
         st.markdown(f'<div class="chapter-box">{text}</div>', unsafe_allow_html=True)
@@ -841,7 +937,15 @@ else:
             prev_text = st.session_state.chapters[i - 1] if i > 0 else ""
             is_last = i == len(st.session_state.chapters) - 1
             is_final = is_last and not st.session_state.story_started
-            st.session_state.summaries = st.session_state.summaries[:i]
+            _ov_through = st.session_state.get("early_overview_through", 0)
+            if _ov_through >= i + 1:
+                st.session_state.early_overview = ""
+                st.session_state.early_overview_through = 0
+                st.session_state.summaries = []
+            else:
+                _summary_offset = _ov_through
+                _keep = i - _summary_offset
+                st.session_state.summaries = st.session_state.summaries[:_keep]
             new_text = generate_chapter(s, chapter_num=i + 1, prev_text=prev_text, is_final=is_final,
                                         style_reference=st.session_state.get("w_style_reference", ""))
             st.session_state.chapters[i] = new_text
@@ -873,7 +977,14 @@ else:
                     _prev = st.session_state.chapters[i - 1] if i > 0 else ""
                     _is_last = i == len(st.session_state.chapters) - 1
                     _is_final = _is_last and not st.session_state.story_started
-                    st.session_state.summaries = st.session_state.summaries[:i]
+                    _ov_through_rw = st.session_state.get("early_overview_through", 0)
+                    if _ov_through_rw >= i + 1:
+                        st.session_state.early_overview = ""
+                        st.session_state.early_overview_through = 0
+                        st.session_state.summaries = []
+                    else:
+                        _keep_rw = i - _ov_through_rw
+                        st.session_state.summaries = st.session_state.summaries[:_keep_rw]
                     _new_text = generate_chapter(
                         _s, chapter_num=i + 1, prev_text=_prev, is_final=_is_final,
                         directive=_inst,
