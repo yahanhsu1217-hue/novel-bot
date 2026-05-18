@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import os
 import streamlit as st
+import streamlit.components.v1 as components
 from openai import OpenAI
 
 from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, LENGTH_CHARS
@@ -795,6 +796,7 @@ else:
     st.divider()
 
     for i, text in enumerate(st.session_state.chapters):
+        st.markdown(f'<div id="ch-{i}"></div>', unsafe_allow_html=True)
         st.markdown(f"## 第 {i + 1} 章")
         st.markdown(f'<div class="chapter-box">{text}</div>', unsafe_allow_html=True)
 
@@ -905,6 +907,52 @@ else:
                     st.rerun()
                 else:
                     st.warning("請填寫問題說明。")
+
+    # ── Chapter navigator (floating right panel) ──────────────────────────────
+    _nav_titles = []
+    for _ci, _ct in enumerate(st.session_state.chapters):
+        _first = _ct.strip().split('\n')[0].strip()
+        _nav_titles.append(_first[:22] if _first else f"第 {_ci+1} 章")
+    _nav_json = json.dumps(_nav_titles, ensure_ascii=False)
+    components.html(f"""
+<script>
+(function(){{
+  var chapters = {_nav_json};
+  var old = window.parent.document.getElementById('_novel_nav');
+  if (old) old.remove();
+  var nav = window.parent.document.createElement('div');
+  nav.id = '_novel_nav';
+  nav.style.cssText = [
+    'position:fixed','right:20px','top:72px','z-index:9999',
+    'background:rgba(15,15,15,0.93)','border:1px solid rgba(255,255,255,0.1)',
+    'border-radius:14px','padding:10px 6px','max-height:72vh','overflow-y:auto',
+    'min-width:124px','backdrop-filter:blur(10px)','box-shadow:0 4px 24px rgba(0,0,0,0.4)'
+  ].join(';');
+  var hd = window.parent.document.createElement('div');
+  hd.style.cssText = 'font-size:0.7rem;color:#555;padding:0 8px 8px;font-weight:700;letter-spacing:1px;white-space:nowrap';
+  hd.textContent = '📖  章節';
+  nav.appendChild(hd);
+  chapters.forEach(function(title, i){{
+    var btn = window.parent.document.createElement('button');
+    btn.textContent = title;
+    btn.style.cssText = [
+      'display:block','width:100%','background:none','border:none',
+      'color:#aaa','padding:5px 8px','text-align:left','cursor:pointer',
+      'font-size:0.78rem','border-radius:7px','margin-bottom:2px',
+      'white-space:nowrap','overflow:hidden','text-overflow:ellipsis','max-width:160px'
+    ].join(';');
+    btn.onmouseover = function(){{ this.style.background='rgba(255,255,255,0.09)'; this.style.color='#fff'; }};
+    btn.onmouseout  = function(){{ this.style.background='none'; this.style.color='#aaa'; }};
+    btn.onclick = function(){{
+      var el = window.parent.document.getElementById('ch-'+i);
+      if (el) el.scrollIntoView({{behavior:'smooth', block:'start'}});
+    }};
+    nav.appendChild(btn);
+  }});
+  window.parent.document.body.appendChild(nav);
+}})();
+</script>
+""", height=0, scrolling=False)
 
     st.divider()
 
