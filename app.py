@@ -918,22 +918,48 @@ else:
 <script>
 (function(){{
   var chapters = {_nav_json};
-  var old = window.parent.document.getElementById('_novel_nav');
+  var D = window.parent.document;
+
+  var old = D.getElementById('_novel_nav');
+  var wasCollapsed = old ? old.dataset.collapsed === '1' : false;
   if (old) old.remove();
-  var nav = window.parent.document.createElement('div');
+
+  var nav = D.createElement('div');
   nav.id = '_novel_nav';
+  nav.dataset.collapsed = wasCollapsed ? '1' : '0';
   nav.style.cssText = [
     'position:fixed','right:20px','top:72px','z-index:9999',
     'background:rgba(15,15,15,0.93)','border:1px solid rgba(255,255,255,0.1)',
-    'border-radius:14px','padding:10px 6px','max-height:72vh','overflow-y:auto',
-    'min-width:124px','backdrop-filter:blur(10px)','box-shadow:0 4px 24px rgba(0,0,0,0.4)'
+    'border-radius:14px','padding:8px 6px',
+    'backdrop-filter:blur(10px)','box-shadow:0 4px 24px rgba(0,0,0,0.4)',
+    'transition:all 0.2s ease'
   ].join(';');
-  var hd = window.parent.document.createElement('div');
-  hd.style.cssText = 'font-size:0.7rem;color:#555;padding:0 8px 8px;font-weight:700;letter-spacing:1px;white-space:nowrap';
-  hd.textContent = '📖  章節';
+
+  /* ── header row (always visible) ── */
+  var hd = D.createElement('div');
+  hd.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0 4px 6px;gap:8px;white-space:nowrap';
+
+  var label = D.createElement('span');
+  label.style.cssText = 'font-size:0.7rem;color:#555;font-weight:700;letter-spacing:1px';
+  label.textContent = '📖  章節';
+
+  var arrow = D.createElement('button');
+  arrow.id = '_novel_nav_arrow';
+  arrow.style.cssText = [
+    'background:none','border:none','color:#666','cursor:pointer',
+    'font-size:0.75rem','padding:0 2px','line-height:1','transition:transform 0.2s'
+  ].join(';');
+
+  hd.appendChild(label);
+  hd.appendChild(arrow);
   nav.appendChild(hd);
+
+  /* ── chapter list ── */
+  var list = D.createElement('div');
+  list.id = '_novel_nav_list';
+
   chapters.forEach(function(title, i){{
-    var btn = window.parent.document.createElement('button');
+    var btn = D.createElement('button');
     btn.textContent = title;
     btn.style.cssText = [
       'display:block','width:100%','background:none','border:none',
@@ -944,12 +970,32 @@ else:
     btn.onmouseover = function(){{ this.style.background='rgba(255,255,255,0.09)'; this.style.color='#fff'; }};
     btn.onmouseout  = function(){{ this.style.background='none'; this.style.color='#aaa'; }};
     btn.onclick = function(){{
-      var el = window.parent.document.getElementById('ch-'+i);
+      var el = D.getElementById('ch-'+i);
       if (el) el.scrollIntoView({{behavior:'smooth', block:'start'}});
     }};
-    nav.appendChild(btn);
+    list.appendChild(btn);
   }});
-  window.parent.document.body.appendChild(nav);
+  nav.appendChild(list);
+
+  /* ── collapse / expand logic ── */
+  function applyState(){{
+    var collapsed = nav.dataset.collapsed === '1';
+    list.style.display = collapsed ? 'none' : 'block';
+    label.style.display = collapsed ? 'none' : 'inline';
+    arrow.textContent   = collapsed ? '◀' : '▶';
+    nav.style.minWidth  = collapsed ? '0' : '124px';
+    nav.style.maxHeight = collapsed ? 'none' : '72vh';
+    nav.style.overflowY = collapsed ? 'visible' : 'auto';
+    nav.style.padding   = collapsed ? '8px 6px' : '8px 6px';
+  }}
+
+  arrow.onclick = function(){{
+    nav.dataset.collapsed = nav.dataset.collapsed === '1' ? '0' : '1';
+    applyState();
+  }};
+
+  applyState();
+  D.body.appendChild(nav);
 }})();
 </script>
 """, height=0, scrolling=False)
