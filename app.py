@@ -891,159 +891,158 @@ else:
                 st.success("已儲存")
 
     with _tab_chapters:
-     for i, text in enumerate(st.session_state.chapters):
-        st.markdown(f'<div id="ch-{i}"></div>', unsafe_allow_html=True)
-        st.markdown(f"## 第 {i + 1} 章")
-        st.markdown(f'<div class="chapter-box">{text}</div>', unsafe_allow_html=True)
+        for i, text in enumerate(st.session_state.chapters):
+            st.markdown(f'<div id="ch-{i}"></div>', unsafe_allow_html=True)
+            st.markdown(f"## 第 {i + 1} 章")
+            st.markdown(f'<div class="chapter-box">{text}</div>', unsafe_allow_html=True)
 
-        _regen_col, _edit_col, _sum_col = st.columns(3)
-        with _regen_col:
-            _regen_btn = st.button(
-                "🔄 重新生成本章", key=f"regen_{i}", use_container_width=True,
-                disabled=not _has_settings,
-            )
-        with _edit_col:
-            _edit_btn = st.button("✏️ 改寫本章", key=f"edit_toggle_{i}", use_container_width=True)
-        with _sum_col:
-            _sum_btn = st.button("📝 製作摘要", key=f"sum_btn_{i}", use_container_width=True)
+            _regen_col, _edit_col, _sum_col = st.columns(3)
+            with _regen_col:
+                _regen_btn = st.button(
+                    "🔄 重新生成本章", key=f"regen_{i}", use_container_width=True,
+                    disabled=not _has_settings,
+                )
+            with _edit_col:
+                _edit_btn = st.button("✏️ 改寫本章", key=f"edit_toggle_{i}", use_container_width=True)
+            with _sum_col:
+                _sum_btn = st.button("📝 製作摘要", key=f"sum_btn_{i}", use_container_width=True)
 
-        if _edit_btn:
-            _cur = st.session_state.get(f"editing_{i}", False)
-            st.session_state[f"editing_{i}"] = not _cur
-            st.rerun()
-
-        if _sum_btn:
-            with st.spinner(f"📝 為第 {i+1} 章製作摘要…"):
-                _new_sum, _new_bible = summarize_chapter(client, text, i + 1)
-            _ov_t = st.session_state.get("early_overview_through", 0)
-            _sidx = i - _ov_t
-            if _sidx >= 0:
-                while len(st.session_state.summaries) <= _sidx:
-                    st.session_state.summaries.append("")
-                st.session_state.summaries[_sidx] = _new_sum
-                b = st.session_state.story_bible
-                b["banned_phrases"] = (b["banned_phrases"] + _new_bible.get("banned_phrases", []))[-40:]
-                b["used_tropes"] = (b["used_tropes"] + _new_bible.get("used_tropes", []))[-20:]
-                b.setdefault("established_facts", [])
-                b["established_facts"] = (b["established_facts"] + _new_bible.get("established_facts", []))[-80:]
-                if _new_bible.get("open_threads"):
-                    b["open_threads"] = _new_bible["open_threads"]
-                _save_session()
-                st.success(f"第 {i+1} 章摘要已記錄！")
+            if _edit_btn:
+                _cur = st.session_state.get(f"editing_{i}", False)
+                st.session_state[f"editing_{i}"] = not _cur
                 st.rerun()
-            else:
-                st.warning("此章節已被壓縮進早期總覽，請至「摘要管理」分頁直接編輯早期總覽。")
 
-        if st.session_state.get(f"editing_{i}", False):
-            with st.container():
-                _edited_text = st.text_area(
-                    "編輯章節內容",
-                    value=text,
-                    key=f"edit_area_{i}",
-                    height=500,
+            if _sum_btn:
+                with st.spinner(f"📝 為第 {i+1} 章製作摘要…"):
+                    _new_sum, _new_bible = summarize_chapter(client, text, i + 1)
+                _ov_t = st.session_state.get("early_overview_through", 0)
+                _sidx = i - _ov_t
+                if _sidx >= 0:
+                    while len(st.session_state.summaries) <= _sidx:
+                        st.session_state.summaries.append("")
+                    st.session_state.summaries[_sidx] = _new_sum
+                    b = st.session_state.story_bible
+                    b["banned_phrases"] = (b["banned_phrases"] + _new_bible.get("banned_phrases", []))[-40:]
+                    b["used_tropes"] = (b["used_tropes"] + _new_bible.get("used_tropes", []))[-20:]
+                    b.setdefault("established_facts", [])
+                    b["established_facts"] = (b["established_facts"] + _new_bible.get("established_facts", []))[-80:]
+                    if _new_bible.get("open_threads"):
+                        b["open_threads"] = _new_bible["open_threads"]
+                    _save_session()
+                    st.success(f"第 {i+1} 章摘要已記錄！")
+                    st.rerun()
+                else:
+                    st.warning("此章節已被壓縮進早期總覽，請至「摘要管理」分頁直接編輯早期總覽。")
+
+            if st.session_state.get(f"editing_{i}", False):
+                with st.container():
+                    _edited_text = st.text_area(
+                        "編輯章節內容",
+                        value=text,
+                        key=f"edit_area_{i}",
+                        height=500,
+                        label_visibility="collapsed",
+                    )
+                    _save_col, _cancel_col = st.columns(2)
+                    with _save_col:
+                        if st.button("💾 儲存改寫", key=f"save_edit_{i}", type="primary", use_container_width=True):
+                            st.session_state.chapters[i] = _edited_text
+                            st.session_state[f"editing_{i}"] = False
+                            _save_session()
+                            st.rerun()
+                    with _cancel_col:
+                        if st.button("✕ 取消", key=f"cancel_edit_{i}", use_container_width=True):
+                            st.session_state[f"editing_{i}"] = False
+                            st.rerun()
+
+            if _regen_btn:
+                s = _collect_settings()
+                st.session_state.saved_settings = s
+                prev_text = st.session_state.chapters[i - 1] if i > 0 else ""
+                is_last = i == len(st.session_state.chapters) - 1
+                is_final = is_last and not st.session_state.story_started
+                _ov_through = st.session_state.get("early_overview_through", 0)
+                if _ov_through >= i + 1:
+                    st.session_state.early_overview = ""
+                    st.session_state.early_overview_through = 0
+                    st.session_state.summaries = []
+                else:
+                    _keep = i - _ov_through
+                    st.session_state.summaries = st.session_state.summaries[:_keep]
+                new_text = generate_chapter(s, chapter_num=i + 1, prev_text=prev_text, is_final=is_final,
+                                            style_reference=st.session_state.get("w_style_reference", ""))
+                st.session_state.chapters[i] = new_text
+                st.rerun()
+
+            # ── AI rewrite ────────────────────────────────────────────────────
+            with st.expander("✍️ AI 改寫本章"):
+                _inst_key = f"rewrite_inst_{i}"
+                st.text_area(
+                    "改寫指示",
+                    key=_inst_key,
+                    placeholder="例：把這章結局改成兩人爭吵離場、讓節奏更緊湊、刪掉中間的閒聊加強衝突…",
+                    height=80,
                     label_visibility="collapsed",
                 )
-                _save_col, _cancel_col = st.columns(2)
-                with _save_col:
-                    if st.button("💾 儲存改寫", key=f"save_edit_{i}", type="primary", use_container_width=True):
-                        st.session_state.chapters[i] = _edited_text
-                        st.session_state[f"editing_{i}"] = False
-                        _save_session()
+                st.checkbox(
+                    "以此指示作為本章結尾（AI 寫到指示事件後立即收章）",
+                    key=f"rewrite_as_ending_{i}",
+                )
+                if st.button("✨ 依指示重新生成", key=f"rewrite_btn_{i}",
+                             use_container_width=True, disabled=not _has_settings):
+                    _inst = st.session_state.get(_inst_key, "").strip()
+                    if _inst:
+                        _rewrite_as_ending = st.session_state.get(f"rewrite_as_ending_{i}", False)
+                        if _rewrite_as_ending:
+                            _inst += _DIRECTIVE_AS_ENDING_RULE
+                        _s = _collect_settings()
+                        st.session_state.saved_settings = _s
+                        _prev = st.session_state.chapters[i - 1] if i > 0 else ""
+                        _is_last = i == len(st.session_state.chapters) - 1
+                        _is_final = _is_last and not st.session_state.story_started
+                        _ov_through_rw = st.session_state.get("early_overview_through", 0)
+                        if _ov_through_rw >= i + 1:
+                            st.session_state.early_overview = ""
+                            st.session_state.early_overview_through = 0
+                            st.session_state.summaries = []
+                        else:
+                            _keep_rw = i - _ov_through_rw
+                            st.session_state.summaries = st.session_state.summaries[:_keep_rw]
+                        _new_text = generate_chapter(
+                            _s, chapter_num=i + 1, prev_text=_prev, is_final=_is_final,
+                            directive=_inst,
+                            style_reference=st.session_state.get("w_style_reference", ""),
+                            preserve_ending=_rewrite_as_ending,
+                        )
+                        st.session_state.chapters[i] = _new_text
                         st.rerun()
-                with _cancel_col:
-                    if st.button("✕ 取消", key=f"cancel_edit_{i}", use_container_width=True):
-                        st.session_state[f"editing_{i}"] = False
-                        st.rerun()
-
-        if _regen_btn:
-            s = _collect_settings()
-            st.session_state.saved_settings = s
-            prev_text = st.session_state.chapters[i - 1] if i > 0 else ""
-            is_last = i == len(st.session_state.chapters) - 1
-            is_final = is_last and not st.session_state.story_started
-            _ov_through = st.session_state.get("early_overview_through", 0)
-            if _ov_through >= i + 1:
-                st.session_state.early_overview = ""
-                st.session_state.early_overview_through = 0
-                st.session_state.summaries = []
-            else:
-                _summary_offset = _ov_through
-                _keep = i - _summary_offset
-                st.session_state.summaries = st.session_state.summaries[:_keep]
-            new_text = generate_chapter(s, chapter_num=i + 1, prev_text=prev_text, is_final=is_final,
-                                        style_reference=st.session_state.get("w_style_reference", ""))
-            st.session_state.chapters[i] = new_text
-            st.rerun()
-
-        # ── AI rewrite ────────────────────────────────────────────────────────
-        with st.expander("✍️ AI 改寫本章"):
-            _inst_key = f"rewrite_inst_{i}"
-            st.text_area(
-                "改寫指示",
-                key=_inst_key,
-                placeholder="例：把這章結局改成兩人爭吵離場、讓節奏更緊湊、刪掉中間的閒聊加強衝突…",
-                height=80,
-                label_visibility="collapsed",
-            )
-            st.checkbox(
-                "以此指示作為本章結尾（AI 寫到指示事件後立即收章）",
-                key=f"rewrite_as_ending_{i}",
-            )
-            if st.button("✨ 依指示重新生成", key=f"rewrite_btn_{i}",
-                         use_container_width=True, disabled=not _has_settings):
-                _inst = st.session_state.get(_inst_key, "").strip()
-                if _inst:
-                    _rewrite_as_ending = st.session_state.get(f"rewrite_as_ending_{i}", False)
-                    if _rewrite_as_ending:
-                        _inst += _DIRECTIVE_AS_ENDING_RULE
-                    _s = _collect_settings()
-                    st.session_state.saved_settings = _s
-                    _prev = st.session_state.chapters[i - 1] if i > 0 else ""
-                    _is_last = i == len(st.session_state.chapters) - 1
-                    _is_final = _is_last and not st.session_state.story_started
-                    _ov_through_rw = st.session_state.get("early_overview_through", 0)
-                    if _ov_through_rw >= i + 1:
-                        st.session_state.early_overview = ""
-                        st.session_state.early_overview_through = 0
-                        st.session_state.summaries = []
                     else:
-                        _keep_rw = i - _ov_through_rw
-                        st.session_state.summaries = st.session_state.summaries[:_keep_rw]
-                    _new_text = generate_chapter(
-                        _s, chapter_num=i + 1, prev_text=_prev, is_final=_is_final,
-                        directive=_inst,
-                        style_reference=st.session_state.get("w_style_reference", ""),
-                        preserve_ending=_rewrite_as_ending,
-                    )
-                    st.session_state.chapters[i] = _new_text
-                    st.rerun()
-                else:
-                    st.warning("請填寫改寫指示")
+                        st.warning("請填寫改寫指示")
 
-        with st.expander("🎓 訓練回饋：標記本章問題"):
-            _t_excerpt = st.text_area(
-                "貼上有問題的段落（可留空）",
-                key=f"t_excerpt_{i}", height=80,
-                placeholder="從章節中複製有問題的句子或段落，貼到這裡…",
-            )
-            _t_issue = st.text_area(
-                "說明問題（發生了什麼錯誤）",
-                key=f"t_issue_{i}", height=60,
-                placeholder="例：角色明明在室外，下一句卻在房間裡說話…",
-            )
-            _t_correction = st.text_area(
-                "正確做法應該是…（填了會讓 AI 更容易遵守）",
-                key=f"t_correction_{i}", height=60,
-                placeholder="例：角色離開室外後，必須先交代進入室內的過程，才能讓她在室內開口說話…",
-            )
-            _t_type = st.selectbox("問題類型", ISSUE_TYPES, key=f"t_type_{i}")
-            if st.button("✅ 加入訓練記錄", key=f"t_submit_{i}"):
-                if _t_issue.strip():
-                    add_note(_t_excerpt, _t_issue, _t_type, _t_correction)
-                    st.success("已記錄！下次生成時 AI 將遵守此規則。")
-                    st.rerun()
-                else:
-                    st.warning("請填寫問題說明。")
+            with st.expander("🎓 訓練回饋：標記本章問題"):
+                _t_excerpt = st.text_area(
+                    "貼上有問題的段落（可留空）",
+                    key=f"t_excerpt_{i}", height=80,
+                    placeholder="從章節中複製有問題的句子或段落，貼到這裡…",
+                )
+                _t_issue = st.text_area(
+                    "說明問題（發生了什麼錯誤）",
+                    key=f"t_issue_{i}", height=60,
+                    placeholder="例：角色明明在室外，下一句卻在房間裡說話…",
+                )
+                _t_correction = st.text_area(
+                    "正確做法應該是…（填了會讓 AI 更容易遵守）",
+                    key=f"t_correction_{i}", height=60,
+                    placeholder="例：角色離開室外後，必須先交代進入室內的過程，才能讓她在室內開口說話…",
+                )
+                _t_type = st.selectbox("問題類型", ISSUE_TYPES, key=f"t_type_{i}")
+                if st.button("✅ 加入訓練記錄", key=f"t_submit_{i}"):
+                    if _t_issue.strip():
+                        add_note(_t_excerpt, _t_issue, _t_type, _t_correction)
+                        st.success("已記錄！下次生成時 AI 將遵守此規則。")
+                        st.rerun()
+                    else:
+                        st.warning("請填寫問題說明。")
 
     # ── Chapter navigator (floating right panel) ──────────────────────────────
     _nav_titles = []
