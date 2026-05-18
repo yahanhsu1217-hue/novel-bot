@@ -63,7 +63,7 @@ def analyze_writing_style(client: OpenAI, sample_text: str) -> str:
     return resp.choices[0].message.content.strip()
 
 
-def fix_repetitive_paragraphs(client: OpenAI, chapter_text: str) -> str:
+def fix_repetitive_paragraphs(client: OpenAI, chapter_text: str, preserve_ending: bool = False) -> str:
     """Detect verbatim repeated paragraph blocks and rewrite the duplicates."""
     paragraphs = [p.strip() for p in chapter_text.split('\n\n') if p.strip()]
     seen: dict = {}
@@ -76,6 +76,10 @@ def fix_repetitive_paragraphs(client: OpenAI, chapter_text: str) -> str:
         seen[key] = 1
     if not has_duplicates:
         return chapter_text
+    ending_rule = (
+        "- 【結尾保護】最後一段是作者設定的強制結尾，嚴禁改寫、刪除或在其後添加任何文字\n"
+        if preserve_ending else ""
+    )
     resp = client.chat.completions.create(
         model=DEFAULT_MODEL,
         messages=[{"role": "user", "content":
@@ -85,8 +89,9 @@ def fix_repetitive_paragraphs(client: OpenAI, chapter_text: str) -> str:
             "- 兩人的反應要有層次推進：情緒升溫、身體變化、對話內容演進\n"
             "- 不可只換幾個詞，必須寫出真正不同的場景發展\n"
             "- 第一次出現的段落完全保留不動\n"
+            f"{ending_rule}"
             "- 直接輸出修改後的完整章節正文，不加任何說明或標記\n"
-            "- 必須輸出完整全文，不可截斷或省略\n\n"
+            "- 必須輸出完整全文，不可截斷或省略；嚴禁在原文最後一句之後添加任何新文字\n\n"
             f"{chapter_text}"
         }],
         max_tokens=8000,
@@ -96,12 +101,16 @@ def fix_repetitive_paragraphs(client: OpenAI, chapter_text: str) -> str:
     return result if result else chapter_text
 
 
-def fix_sensory_crutches(client: OpenAI, chapter_text: str) -> str:
+def fix_sensory_crutches(client: OpenAI, chapter_text: str, preserve_ending: bool = False) -> str:
     """Rewrite overused 她能X到那股Y sensory perception sentences into direct descriptions."""
     import re
     count = len(re.findall(r'她能[^\s，。！？]{1,4}到', chapter_text))
     if count <= 3:
         return chapter_text
+    ending_rule = (
+        "- 【結尾保護】最後一段是作者設定的強制結尾，嚴禁改寫或在其後添加任何文字\n"
+        if preserve_ending else ""
+    )
     resp = client.chat.completions.create(
         model=DEFAULT_MODEL,
         messages=[{"role": "user", "content":
@@ -114,8 +123,9 @@ def fix_sensory_crutches(client: OpenAI, chapter_text: str) -> str:
             "- ✗「她能感覺到那股視線——Dalon Tsai的目光落在她身上」→ ✓「Dalon Tsai的目光停在她身上，不動」\n"
             "- 每句改寫後必須保留原句的信息，不可刪除內容\n"
             "- 只改「她能X到」的句子，其餘文字完全不動\n"
+            f"{ending_rule}"
             "- 直接輸出修改後的完整章節正文，不加任何說明或標記\n"
-            "- 必須輸出完整全文，不可截斷\n\n"
+            "- 必須輸出完整全文，不可截斷；嚴禁在原文最後一句之後添加任何新文字\n\n"
             f"{chapter_text}"
         }],
         max_tokens=8000,
@@ -125,7 +135,7 @@ def fix_sensory_crutches(client: OpenAI, chapter_text: str) -> str:
     return result if result else chapter_text
 
 
-def fix_consistency(client: OpenAI, chapter_text: str, protagonist_name: str = "", extra_names: list[str] | None = None, nickname: str = "") -> str:
+def fix_consistency(client: OpenAI, chapter_text: str, protagonist_name: str = "", extra_names: list[str] | None = None, nickname: str = "", preserve_ending: bool = False) -> str:
     """Scan chapter for internal contradictions (location, numbers, facts) and fix them."""
     name_rules = []
     if protagonist_name:
@@ -135,6 +145,11 @@ def fix_consistency(client: OpenAI, chapter_text: str, protagonist_name: str = "
         if n.strip():
             name_rules.append(f"- 角色「{n}」的名字不可被翻譯或音譯，若出現其他語言的近似詞（如中文音譯），一律改回「{n}」")
     name_rule = "\n".join(name_rules) + "\n" if name_rules else "- 所有角色名字不可被翻譯或音譯\n"
+    ending_rule = (
+        "4. 【結尾保護 — 最高優先級】最後一段是作者設定的強制結尾，即使看起來突然也屬正常，"
+        "嚴禁補充、延伸或在其後添加任何新對話、動作、旁白；輸出必須與原文最後一句完全一致\n"
+        if preserve_ending else ""
+    )
     resp = client.chat.completions.create(
         model=DEFAULT_MODEL,
         messages=[{"role": "user", "content":
@@ -147,7 +162,8 @@ def fix_consistency(client: OpenAI, chapter_text: str, protagonist_name: str = "
             "規則：\n"
             "1. 只修正有矛盾的地方，其餘文字完全保留，不可改動\n"
             "2. 直接輸出修正後的完整章節正文，不要加說明或標記\n"
-            "3. 必須輸出完整全文，不可截斷、省略或縮短任何段落；若原文很長，也必須完整輸出到最後一個字\n\n"
+            "3. 必須輸出完整全文，不可截斷、省略或縮短任何段落；嚴禁在原文最後一句之後添加任何新文字\n"
+            f"{ending_rule}\n"
             f"{chapter_text}"
         }],
         max_tokens=8000,

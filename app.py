@@ -659,7 +659,7 @@ def _validate(s: dict) -> list[str]:
 
 # ── Generate logic ────────────────────────────────────────────────────────────
 
-def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_final: bool = False, directive: str = "", style_reference: str = ""):
+def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_final: bool = False, directive: str = "", style_reference: str = "", preserve_ending: bool = False):
     full_text = ""
     placeholder = st.empty()
     for chunk in stream_chapter(
@@ -681,13 +681,13 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
         )
     if settings.get("nsfw"):
         with st.spinner("✍️ 修正重複段落…"):
-            full_text = fix_repetitive_paragraphs(client, full_text)
+            full_text = fix_repetitive_paragraphs(client, full_text, preserve_ending=preserve_ending)
             placeholder.markdown(
                 f'<div class="chapter-box">{full_text}</div>',
                 unsafe_allow_html=True,
             )
         with st.spinner("✍️ 改寫重複感知句式…"):
-            full_text = fix_sensory_crutches(client, full_text)
+            full_text = fix_sensory_crutches(client, full_text, preserve_ending=preserve_ending)
             placeholder.markdown(
                 f'<div class="chapter-box">{full_text}</div>',
                 unsafe_allow_html=True,
@@ -695,7 +695,7 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
     with st.spinner("🔍 校正內容一致性…"):
         protagonist_name = settings.get("name", "") if settings else ""
         extra_names = [c["name"] for c in (settings.get("extra_characters") or []) if c.get("name", "").strip()]
-        full_text = fix_consistency(client, full_text, protagonist_name, extra_names, settings.get("nickname", ""))
+        full_text = fix_consistency(client, full_text, protagonist_name, extra_names, settings.get("nickname", ""), preserve_ending=preserve_ending)
         placeholder.markdown(
             f'<div class="chapter-box">{full_text}</div>',
             unsafe_allow_html=True,
@@ -743,7 +743,7 @@ if start_btn:
         _directive += _DIRECTIVE_AS_ENDING_RULE
     st.session_state._dir_ver += 1
     _style_ref = st.session_state.get("w_style_reference", "")
-    chapter_text = generate_chapter(s, chapter_num=1, is_final=is_final, directive=_directive, style_reference=_style_ref)
+    chapter_text = generate_chapter(s, chapter_num=1, is_final=is_final, directive=_directive, style_reference=_style_ref, preserve_ending=_first_as_ending)
     st.session_state.chapters.append(chapter_text)
     st.rerun()
 
@@ -843,7 +843,8 @@ else:
                          use_container_width=True, disabled=not _has_settings):
                 _inst = st.session_state.get(_inst_key, "").strip()
                 if _inst:
-                    if st.session_state.get(f"rewrite_as_ending_{i}", False):
+                    _rewrite_as_ending = st.session_state.get(f"rewrite_as_ending_{i}", False)
+                    if _rewrite_as_ending:
                         _inst += _DIRECTIVE_AS_ENDING_RULE
                     _s = st.session_state.saved_settings
                     _prev = st.session_state.chapters[i - 1] if i > 0 else ""
@@ -854,6 +855,7 @@ else:
                         _s, chapter_num=i + 1, prev_text=_prev, is_final=_is_final,
                         directive=_inst,
                         style_reference=st.session_state.get("w_style_reference", ""),
+                        preserve_ending=_rewrite_as_ending,
                     )
                     st.session_state.chapters[i] = _new_text
                     st.rerun()
@@ -930,7 +932,8 @@ else:
             chapter_text = generate_chapter(s, chapter_num=chapter_num,
                                             prev_text=st.session_state.chapters[-1],
                                             is_final=is_final, directive=_directive,
-                                            style_reference=st.session_state.get("w_style_reference", ""))
+                                            style_reference=st.session_state.get("w_style_reference", ""),
+                                            preserve_ending=_dir_as_ending)
             st.session_state.chapters.append(chapter_text)
             st.rerun()
 
@@ -946,7 +949,8 @@ else:
             chapter_text = generate_chapter(s, chapter_num=chapter_num,
                                             prev_text=st.session_state.chapters[-1],
                                             is_final=True, directive=_directive,
-                                            style_reference=st.session_state.get("w_style_reference", ""))
+                                            style_reference=st.session_state.get("w_style_reference", ""),
+                                            preserve_ending=_dir_as_ending)
             st.session_state.chapters.append(chapter_text)
             st.session_state.story_started = False
             st.rerun()
