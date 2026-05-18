@@ -659,6 +659,18 @@ def _validate(s: dict) -> list[str]:
 
 # ── Generate logic ────────────────────────────────────────────────────────────
 
+def _trim_to_original_end(original: str, processed: str, slack: int = 60) -> str:
+    """Hard-trim processed text so it doesn't extend beyond original ending.
+    Allows up to `slack` extra characters for legitimate in-place rewrites."""
+    if len(processed) <= len(original) + slack:
+        return processed
+    target = len(original)
+    break_pos = processed.rfind('\n\n', 0, target + slack)
+    if break_pos != -1 and break_pos >= target - 300:
+        return processed[:break_pos].rstrip()
+    return processed[:target].rstrip()
+
+
 def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_final: bool = False, directive: str = "", style_reference: str = "", preserve_ending: bool = False):
     full_text = ""
     placeholder = st.empty()
@@ -679,15 +691,20 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
             f'<div class="chapter-box">{full_text}</div>',
             unsafe_allow_html=True,
         )
+    _pre_fix_len = len(full_text) if preserve_ending else 0
     if settings.get("nsfw"):
         with st.spinner("✍️ 修正重複段落…"):
             full_text = fix_repetitive_paragraphs(client, full_text, preserve_ending=preserve_ending)
+            if preserve_ending:
+                full_text = _trim_to_original_end(full_text[:_pre_fix_len], full_text)
             placeholder.markdown(
                 f'<div class="chapter-box">{full_text}</div>',
                 unsafe_allow_html=True,
             )
         with st.spinner("✍️ 改寫重複感知句式…"):
             full_text = fix_sensory_crutches(client, full_text, preserve_ending=preserve_ending)
+            if preserve_ending:
+                full_text = _trim_to_original_end(full_text[:_pre_fix_len], full_text)
             placeholder.markdown(
                 f'<div class="chapter-box">{full_text}</div>',
                 unsafe_allow_html=True,
@@ -696,6 +713,8 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
         protagonist_name = settings.get("name", "") if settings else ""
         extra_names = [c["name"] for c in (settings.get("extra_characters") or []) if c.get("name", "").strip()]
         full_text = fix_consistency(client, full_text, protagonist_name, extra_names, settings.get("nickname", ""), preserve_ending=preserve_ending)
+        if preserve_ending:
+            full_text = _trim_to_original_end(full_text[:_pre_fix_len], full_text)
         placeholder.markdown(
             f'<div class="chapter-box">{full_text}</div>',
             unsafe_allow_html=True,
