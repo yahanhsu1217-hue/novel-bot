@@ -936,10 +936,26 @@ else:
                     if _new_bible.get("open_threads"):
                         b["open_threads"] = _new_bible["open_threads"]
                     _save_session()
-                    st.success(f"第 {i+1} 章摘要已記錄！")
                     st.rerun()
                 else:
                     st.warning("此章節已被壓縮進早期總覽，請至「摘要管理」分頁直接編輯早期總覽。")
+
+            # Show inline summary if it exists for this chapter
+            _ov_t2 = st.session_state.get("early_overview_through", 0)
+            _sidx2 = i - _ov_t2
+            if 0 <= _sidx2 < len(st.session_state.summaries) and st.session_state.summaries[_sidx2]:
+                with st.expander("📋 本章摘要", expanded=False):
+                    _sum_display = st.text_area(
+                        "摘要（可直接修改）",
+                        value=st.session_state.summaries[_sidx2],
+                        key=f"inline_sum_{i}",
+                        height=120,
+                        label_visibility="collapsed",
+                    )
+                    if st.button("💾 儲存修改", key=f"inline_sum_save_{i}"):
+                        st.session_state.summaries[_sidx2] = _sum_display
+                        _save_session()
+                        st.success("已儲存")
 
             if st.session_state.get(f"editing_{i}", False):
                 with st.container():
