@@ -606,6 +606,13 @@ with st.sidebar:
     )
     start_btn = st.button("✨ 開始新故事", type="primary", use_container_width=True)
 
+# Auto-save sidebar settings on every run so refreshing restores current state
+try:
+    with open(LAST_SETTINGS_FILE, "w", encoding="utf-8") as _autosave_f:
+        _autosave_f.write(_current_settings_json())
+except Exception:
+    pass
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _collect_settings() -> dict:
