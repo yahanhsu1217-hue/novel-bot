@@ -762,13 +762,13 @@ def stream_chapter(
 {pov_instruction}
 {progress_note}
 
-【上一章結尾】
-{context}
-
 {ending_instruction}
 {length_block}
 {style_block}
 {directive_block}
+【⚠️ 上一章結尾 — 本章開場必須直接承接以下最後一幕，不可無視或跳過】
+{context}
+
 直接輸出故事正文，格式如下：
 
 第{chapter_num}章　[章節標題]
