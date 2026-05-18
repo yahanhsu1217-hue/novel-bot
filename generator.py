@@ -16,7 +16,7 @@ def summarize_chapter(client: OpenAI, chapter_text: str, chapter_num: int) -> tu
         messages=[{"role": "user", "content":
             f"分析第 {chapter_num} 章，只輸出 JSON，不要其他文字：\n"
             f"{{\n"
-            f'  "summary": "100字內條列關鍵事件、情感進展、決策結果",\n'
+            f'  "summary": "300字內條列：①關鍵事件與結果 ②角色當前位置與狀態 ③情感進展與關係變化 ④尚未解決的衝突或伏筆 ⑤重要決策與後果",\n'
             f'  "banned_phrases": ["逐字列出本章出現、後續不可重複的具體語句或句型，至少5條"],\n'
             f'  "used_tropes": ["本章使用的情感或劇情套路"],\n'
             f'  "open_threads": ["尚未解決的伏筆或承諾，例如某角色說有話要說但未說"],\n'
@@ -563,8 +563,8 @@ def stream_chapter(
 
     history_block = ""
     if prev_summaries:
-        # Only pass the most recent 5 summaries to prevent prompt bloat
-        recent = prev_summaries[-5:]
+        # Only pass the most recent 8 summaries to prevent prompt bloat
+        recent = prev_summaries[-8:]
         start_idx = len(prev_summaries) - len(recent)
         lines = "\n".join(f"第 {start_idx+i+1} 章：{s}" for i, s in enumerate(recent))
         history_block = (
@@ -697,9 +697,10 @@ def stream_chapter(
         _extra_chars_str(extra_characters),
         _must_appear_block(extra_characters, cp_characters, cp_type),
         plot_block,
-        history_block,
-        bible_block,
     ]))
+
+    # memory_block is placed right before context so AI reads it last before writing
+    memory_block = "\n\n".join(filter(None, [history_block, bible_block]))
 
     progress_note = ""
     if is_final:
@@ -757,6 +758,7 @@ def stream_chapter(
             if is_final else
             "請自然銜接上一章，推進情節，帶出新的發展或衝突，結尾留下鉤子。"
         )
+        memory_section = f"\n{memory_block}\n" if memory_block else ""
         prompt = f"""{directive_block + chr(10) + chr(10) if directive_block else ""}故事設定：
 {setting_block}
 
@@ -767,7 +769,7 @@ def stream_chapter(
 {ending_instruction}
 {length_block}
 {style_block}
-{directive_block}
+{directive_block}{memory_section}
 【⚠️ 上一章結尾 — 強制執行以下兩條，違反即失敗】
 1. 本章開場必須直接承接以下最後一幕的時間點與地點，不可跳過或無視
 2. 角色所在地點與上一章結尾一致；若需換場景，必須在正文中明確交代移動過程
