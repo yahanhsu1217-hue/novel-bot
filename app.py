@@ -836,7 +836,8 @@ else:
                         st.rerun()
 
         if _regen_btn:
-            s = st.session_state.saved_settings
+            s = _collect_settings()
+            st.session_state.saved_settings = s
             prev_text = st.session_state.chapters[i - 1] if i > 0 else ""
             is_last = i == len(st.session_state.chapters) - 1
             is_final = is_last and not st.session_state.story_started
@@ -867,7 +868,8 @@ else:
                     _rewrite_as_ending = st.session_state.get(f"rewrite_as_ending_{i}", False)
                     if _rewrite_as_ending:
                         _inst += _DIRECTIVE_AS_ENDING_RULE
-                    _s = st.session_state.saved_settings
+                    _s = _collect_settings()
+                    st.session_state.saved_settings = _s
                     _prev = st.session_state.chapters[i - 1] if i > 0 else ""
                     _is_last = i == len(st.session_state.chapters) - 1
                     _is_final = _is_last and not st.session_state.story_started
@@ -1030,7 +1032,8 @@ else:
             ending_btn = st.button("🎬 寫結局", use_container_width=True, disabled=not _has_settings)
 
         if continue_btn:
-            s = st.session_state.saved_settings
+            s = _collect_settings()
+            st.session_state.saved_settings = s
             chapter_num = len(st.session_state.chapters) + 1
             is_final = chapter_num >= s["total_chapters"]
             _directive = st.session_state.get(f"next_dir_{st.session_state._dir_ver}", "")
@@ -1051,7 +1054,8 @@ else:
             st.rerun()
 
         if ending_btn:
-            s = st.session_state.saved_settings
+            s = _collect_settings()
+            st.session_state.saved_settings = s
             chapter_num = len(st.session_state.chapters) + 1
             _directive = st.session_state.get(f"next_dir_{st.session_state._dir_ver}", "")
             _dir_as_ending = st.session_state.get(f"next_dir_as_ending_{st.session_state._dir_ver}", False)
