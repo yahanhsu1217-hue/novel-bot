@@ -23,7 +23,7 @@ def summarize_chapter(client: OpenAI, chapter_text: str, chapter_num: int) -> tu
             f'  "established_facts": ["本章確立的世界觀事實、角色能力、角色所在位置、重要物品、人物關係等，格式：實體+狀態，例如：主角目前無任何異能、A角色在B地點、主角不知道X秘密"]\n'
             f"}}\n\n{chapter_text}"
         }],
-        max_tokens=800,
+        max_tokens=1600,
         temperature=0.2,
     )
     text = resp.choices[0].message.content.strip()
@@ -568,11 +568,12 @@ def stream_chapter(
         start_idx = len(prev_summaries) - len(recent)
         lines = "\n".join(f"第 {start_idx+i+1} 章：{s}" for i, s in enumerate(recent))
         history_block = (
-            f"【前面章節記錄】\n"
-            f"嚴格禁止重複：情節走向、橋段類型、對話模式、描寫詞彙、句型結構。\n"
-            f"【注意】「不重複」指的是劇情結構與情感弧線，不是地點與物理環境——"
-            f"角色所在地點必須從上一章結尾延續，不可因為「要不同」而無故換場景。\n"
-            f"{lines}"
+            f"【⚠️ 故事歷程記錄 — 這是你必須記住的完整故事背景，不可遺忘或自相矛盾】\n"
+            f"以下是故事至今每一章的關鍵進展。新章節必須在此基礎上延續，"
+            f"所有已發生的事件、已確立的關係、已做出的決策，在後續章節中必須持續有效：\n\n"
+            f"{lines}\n\n"
+            f"【禁止】在不同章節中讓相同情節或對話重複發生；"
+            f"【禁止】無故換地點——若需移動場景，必須在正文中明確交代移動過程。"
         )
 
     env_block = f"【環境設定】\n{environment}" if environment else ""
@@ -599,8 +600,9 @@ def stream_chapter(
         if story_bible.get("established_facts"):
             facts = "\n".join(f"- {f}" for f in story_bible["established_facts"])
             parts.append(
-                f"【已確立的世界事實（絕對不可違背或自相矛盾）】\n"
-                f"以下是前面章節已明確建立的事實，後續章節不得推翻、忽略或與之矛盾：\n{facts}"
+                f"【⚠️ 已確立的故事事實 — 必須全部記住，絕對不可違背】\n"
+                f"以下每一條都是前面章節已明確建立的事實，包括角色位置、關係現況、能力狀態、重要物品。\n"
+                f"後續章節不得推翻、忽略、遺忘或與之矛盾，違反任何一條即視為失敗：\n{facts}"
             )
         if parts:
             bible_block = "\n".join(parts)
