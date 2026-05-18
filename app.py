@@ -896,7 +896,7 @@ else:
         st.markdown(f"## 第 {i + 1} 章")
         st.markdown(f'<div class="chapter-box">{text}</div>', unsafe_allow_html=True)
 
-        _regen_col, _edit_col = st.columns(2)
+        _regen_col, _edit_col, _sum_col = st.columns(3)
         with _regen_col:
             _regen_btn = st.button(
                 "🔄 重新生成本章", key=f"regen_{i}", use_container_width=True,
@@ -904,11 +904,35 @@ else:
             )
         with _edit_col:
             _edit_btn = st.button("✏️ 改寫本章", key=f"edit_toggle_{i}", use_container_width=True)
+        with _sum_col:
+            _sum_btn = st.button("📝 製作摘要", key=f"sum_btn_{i}", use_container_width=True)
 
         if _edit_btn:
             _cur = st.session_state.get(f"editing_{i}", False)
             st.session_state[f"editing_{i}"] = not _cur
             st.rerun()
+
+        if _sum_btn:
+            with st.spinner(f"📝 為第 {i+1} 章製作摘要…"):
+                _new_sum, _new_bible = summarize_chapter(client, text, i + 1)
+            _ov_t = st.session_state.get("early_overview_through", 0)
+            _sidx = i - _ov_t
+            if _sidx >= 0:
+                while len(st.session_state.summaries) <= _sidx:
+                    st.session_state.summaries.append("")
+                st.session_state.summaries[_sidx] = _new_sum
+                b = st.session_state.story_bible
+                b["banned_phrases"] = (b["banned_phrases"] + _new_bible.get("banned_phrases", []))[-40:]
+                b["used_tropes"] = (b["used_tropes"] + _new_bible.get("used_tropes", []))[-20:]
+                b.setdefault("established_facts", [])
+                b["established_facts"] = (b["established_facts"] + _new_bible.get("established_facts", []))[-80:]
+                if _new_bible.get("open_threads"):
+                    b["open_threads"] = _new_bible["open_threads"]
+                _save_session()
+                st.success(f"第 {i+1} 章摘要已記錄！")
+                st.rerun()
+            else:
+                st.warning("此章節已被壓縮進早期總覽，請至「摘要管理」分頁直接編輯早期總覽。")
 
         if st.session_state.get(f"editing_{i}", False):
             with st.container():
