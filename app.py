@@ -10,11 +10,19 @@ import streamlit as st
 from openai import OpenAI
 
 from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, LENGTH_CHARS
-from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency, fix_sensory_crutches, fix_repetitive_paragraphs, analyze_writing_style
+from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency, fix_sensory_crutches, fix_repetitive_paragraphs, analyze_writing_style, STYLE_PRESETS
 from training import ISSUE_TYPES, add_note, delete_note, load_notes, notes_to_prompt_block
 
 LAST_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_settings.json")
 LAST_SESSION_FILE  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_session.json")
+
+_DIRECTIVE_AS_ENDING_RULE = (
+    "\n\n【⚠️ 本章以此指示作結 — 絕對執行，不可違背】\n"
+    "以上指示描述的最後一個場景或事件，是本章的結束點。\n"
+    "整章向此方向推進，寫完指示描述的內容後立即收章。\n"
+    "嚴禁在指示事件結束後繼續加入新對話、新動作、新情節或後續發展。\n"
+    "本章在指示的最後一刻自然結束，不留鉤子，不補充說明。"
+)
 
 # ── Page config ───────────────────────────────────────────────────────────────
 
@@ -122,6 +130,7 @@ for k, v in [
     ("w_nsfw",            False),
     ("w_style_sample",    ""),
     ("w_style_reference", ""),
+    ("w_next_next_dir",   ""),
     ("_dir_ver", 0),
 ]:
     if k not in st.session_state:
@@ -494,6 +503,14 @@ with st.sidebar:
     # ── Style reference ───────────────────────────────────────────────────────
     st.markdown("### ✍️ 文風參考")
     st.caption("貼上你欣賞的作者文章片段，AI 將分析其文風並照此密度與選字寫作")
+
+    _preset_options = ["（不使用預設）"] + list(STYLE_PRESETS.keys())
+    _preset_sel = st.selectbox("套用預設文風", _preset_options, label_visibility="collapsed", key="_preset_sel")
+    if _preset_sel != "（不使用預設）":
+        if st.button("✦ 套用預設", use_container_width=True):
+            st.session_state["w_style_reference"] = STYLE_PRESETS[_preset_sel]
+            st.rerun()
+
     st.text_area(
         "參考文章片段", key="w_style_sample",
         placeholder="貼上任何你欣賞的中文小說段落（建議 200-1000 字）…",
@@ -577,6 +594,10 @@ with st.sidebar:
         "本章特別指示", key=f"w_first_dir_{st.session_state._dir_ver}",
         placeholder="例：開場在大雨夜、主角剛收到一封匿名信…（留空則由 AI 自由發揮）",
         height=80, label_visibility="collapsed",
+    )
+    st.checkbox(
+        "以此指示作為本章結尾（AI 寫到指示事件後立即收章）",
+        key=f"first_dir_as_ending_{st.session_state._dir_ver}",
     )
     start_btn = st.button("✨ 開始新故事", type="primary", use_container_width=True)
 
@@ -717,6 +738,9 @@ if start_btn:
     st.session_state.story_started = True
     is_final = s["total_chapters"] == 1
     _directive = st.session_state.get(f"w_first_dir_{st.session_state._dir_ver}", "")
+    _first_as_ending = st.session_state.get(f"first_dir_as_ending_{st.session_state._dir_ver}", False)
+    if _first_as_ending and _directive.strip():
+        _directive += _DIRECTIVE_AS_ENDING_RULE
     st.session_state._dir_ver += 1
     _style_ref = st.session_state.get("w_style_reference", "")
     chapter_text = generate_chapter(s, chapter_num=1, is_final=is_final, directive=_directive, style_reference=_style_ref)
@@ -867,6 +891,17 @@ else:
             placeholder="例：這章以回憶展開、發生停電意外、CP 獨處…（留空則由 AI 自由發揮）",
             height=80, label_visibility="collapsed",
         )
+        st.checkbox(
+            "以此指示作為本章結尾（AI 寫到指示事件後立即收章）",
+            key=f"next_dir_as_ending_{st.session_state._dir_ver}",
+        )
+        st.markdown("#### 📌 下下章特別指示")
+        st.caption("生成下一章後自動移入上方「下一章特別指示」")
+        st.text_area(
+            "下下章特別指示", key="w_next_next_dir",
+            placeholder="預先填入，生成下一章後自動帶入…",
+            height=80, label_visibility="collapsed",
+        )
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
             continue_btn = st.button("➡️ 繼續下一章", type="primary", use_container_width=True, disabled=not _has_settings)
@@ -878,7 +913,14 @@ else:
             chapter_num = len(st.session_state.chapters) + 1
             is_final = chapter_num >= s["total_chapters"]
             _directive = st.session_state.get(f"next_dir_{st.session_state._dir_ver}", "")
+            _dir_as_ending = st.session_state.get(f"next_dir_as_ending_{st.session_state._dir_ver}", False)
+            _next_next = st.session_state.get("w_next_next_dir", "")
+            if _dir_as_ending and _directive.strip():
+                _directive += _DIRECTIVE_AS_ENDING_RULE
             st.session_state._dir_ver += 1
+            if _next_next.strip():
+                st.session_state[f"next_dir_{st.session_state._dir_ver}"] = _next_next
+                st.session_state["w_next_next_dir"] = ""
             chapter_text = generate_chapter(s, chapter_num=chapter_num,
                                             prev_text=st.session_state.chapters[-1],
                                             is_final=is_final, directive=_directive,
@@ -890,7 +932,11 @@ else:
             s = st.session_state.saved_settings
             chapter_num = len(st.session_state.chapters) + 1
             _directive = st.session_state.get(f"next_dir_{st.session_state._dir_ver}", "")
+            _dir_as_ending = st.session_state.get(f"next_dir_as_ending_{st.session_state._dir_ver}", False)
+            if _dir_as_ending and _directive.strip():
+                _directive += _DIRECTIVE_AS_ENDING_RULE
             st.session_state._dir_ver += 1
+            st.session_state["w_next_next_dir"] = ""
             chapter_text = generate_chapter(s, chapter_num=chapter_num,
                                             prev_text=st.session_state.chapters[-1],
                                             is_final=True, directive=_directive,
