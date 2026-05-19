@@ -75,6 +75,7 @@ if "_settings_initialized" not in st.session_state:
         for _j, _cp in enumerate(_cp_chars):
             st.session_state[f"cpname_{_j}"] = _cp.get("name", "")
             st.session_state[f"cpinti_{_j}"] = _cp.get("intimacy", "糖（甜蜜互動）")
+            st.session_state[f"cpnotes_{_j}"] = _cp.get("notes", "")
         st.session_state["num_extra_chars"] = _last.get("num_extra_chars", 0)
         for _i, _c in enumerate(_last.get("extra_characters", [])):
             st.session_state[f"cn_{_i}"]   = _c.get("name", "")
@@ -173,6 +174,7 @@ with st.sidebar:
             cp_chars.append({
                 "name":     st.session_state.get(f"cpname_{i}", ""),
                 "intimacy": st.session_state.get(f"cpinti_{i}", "糖（甜蜜互動）"),
+                "notes":    st.session_state.get(f"cpnotes_{i}", ""),
             })
         data = {
             "world_mode":       st.session_state.get("w_world_mode",       "作品世界"),
@@ -231,6 +233,7 @@ with st.sidebar:
             for _j, _cp in enumerate(_cp_load):
                 st.session_state[f"cpname_{_j}"] = _cp.get("name", "")
                 st.session_state[f"cpinti_{_j}"] = _cp.get("intimacy", "糖（甜蜜互動）")
+                st.session_state[f"cpnotes_{_j}"] = _cp.get("notes", "")
             n = data.get("num_extra_chars", 0)
             st.session_state.num_extra_chars = n
             for i, c in enumerate(data.get("extra_characters", [])):
@@ -430,7 +433,14 @@ with st.sidebar:
                     options=["清水（純愛暗戀）", "糖（甜蜜互動）", "甜虐（曖昧張力）", "熾熱（激情親密）"],
                     key=f"cpinti_{i}",
                 )
-                cp_characters.append({"name": cp_name, "intimacy": cp_inti})
+                cp_notes = st.text_area(
+                    "感情備注（特殊限制）",
+                    key=f"cpnotes_{i}",
+                    placeholder="例：她是直女，即使到故事後期也不會輕易喜歡上主角，最多只是對主角有一絲困惑或好奇，不會主動表達好感…",
+                    height=68,
+                    help="填寫後，此限制凌駕通用感情節奏，AI 必須全程遵守。適合設定「直女慢慢動搖」「單方面曖昧」「極度緩慢的感情線」等情境。",
+                )
+                cp_characters.append({"name": cp_name, "intimacy": cp_inti, "notes": cp_notes})
         if not cp_characters:
             st.info("點擊「＋ 新增 CP 對象」加入配對角色")
 

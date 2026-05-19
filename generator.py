@@ -470,6 +470,7 @@ def _cp_str(cp_type: str, cp_characters: list[dict], name: str, nsfw: bool = Fal
             for c in valid
         )
         lines = [f"CP 設定：我（{name}）× {display_names}"]
+        char_notes_lines = []
         for c in valid:
             char_name = c["name"].strip()
             intimacy = c.get("intimacy", "糖（甜蜜互動）")
@@ -480,13 +481,24 @@ def _cp_str(cp_type: str, cp_characters: list[dict], name: str, nsfw: bool = Fal
                 lines.append(f"- AI 自選角色：請從世界中挑選合適角色，親密程度上限：{guide}")
             else:
                 lines.append(f"- {char_name}：親密程度上限：{guide}")
+            notes = c.get("notes", "").strip()
+            if notes:
+                char_notes_lines.append(f"- {char_name}：{notes}")
+        if char_notes_lines:
+            lines += [
+                "【⚠️ 各 CP 角色感情限制 — 最高優先級，凌駕下方感情節奏，每條硬性執行】",
+                "以下是每個 CP 角色的個別感情限制，優先於「感情發展節奏」的通用規則：",
+            ] + char_notes_lines + [
+                "【重要】以上限制不因章節推進而自動解除；除非用戶在「本章特別指示」中明確指定，否則不得違背。",
+            ]
         lines += [
-            "【感情發展節奏 — 嚴格遵守】",
+            "【感情發展節奏 — 嚴格遵守（若上方有個別角色限制，以個別限制為準）】",
             "- 故事開始時與所有 CP 對象之間沒有任何曖昧或特別的好感，關係從普通甚至疏遠開始",
             "- 前期（前 1/3）：只是普通互動，也許有輕微的注意，但絕對不能有明顯的心動或曖昧行為",
             "- 中期（中 1/3）：因共同經歷開始有更深的了解，可能出現一方先有感覺，但仍壓抑或不確定",
             "- 後期（後 1/3）：感情才逐漸浮現，曖昧與心動自然流露",
             "- 禁止在前期安排：深情凝視、心跳加速、互送秋波、曖昧對話、明顯的互相在意",
+            "- 【非對等感情】若某角色有個別限制（如直女、排斥、對立），她的感情進展必須遠慢於通用節奏，不可因為到了故事後期就自動讓她產生浪漫感情",
         ]
         return "\n".join(lines)
     return "CP 設定：無 CP，純故事向"
