@@ -820,7 +820,7 @@ def stream_chapter(
                 f"後續章節不得推翻、忽略、遺忘或與之矛盾，違反任何一條即視為失敗：\n{facts}"
             )
         if story_bible.get("asked_questions"):
-            recent_qs = story_bible["asked_questions"][-40:]
+            recent_qs = story_bible["asked_questions"]  # all questions, no cap
             qs_str = "\n".join(f"- {q}" for q in recent_qs)
             parts.append(
                 f"【⚠️ 已問過的問題 — 嚴禁重複】\n"

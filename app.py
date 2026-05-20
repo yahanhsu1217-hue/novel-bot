@@ -878,7 +878,7 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
     b.setdefault("established_facts", [])
     b["established_facts"] = (b["established_facts"] + bible_update.get("established_facts", []))[-80:]
     b.setdefault("asked_questions", [])
-    b["asked_questions"] = (b["asked_questions"] + bible_update.get("asked_questions", []))[-60:]
+    b["asked_questions"] = list(dict.fromkeys(b["asked_questions"] + bible_update.get("asked_questions", [])))  # deduplicate, keep all
     _save_session()
     return full_text
 
