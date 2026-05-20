@@ -934,9 +934,20 @@ if start_btn:
     st.session_state.early_overview = ""
     st.session_state.early_overview_through = 0
     st.session_state.saved_settings = s
+    # Clear per-chapter UI state from previous story
+    _stale_prefixes = ("editing_", "rewrite_inst_", "rewrite_as_ending_",
+                       "t_excerpt_", "t_issue_", "t_correction_", "t_type_",
+                       "inline_sum_", "_sum_edit_", "_save_sum_")
+    for _k in [k for k in st.session_state if any(k.startswith(p) for p in _stale_prefixes)]:
+        del st.session_state[_k]
+    # Overwrite session file with empty state so stale data never reloads
     try:
-        os.remove(LAST_SESSION_FILE)
-    except FileNotFoundError:
+        with open(LAST_SESSION_FILE, "w", encoding="utf-8") as _f:
+            import json as _json2
+            _json2.dump({"chapters": [], "summaries": [], "story_bible": st.session_state.story_bible,
+                         "saved_settings": {}, "early_overview": "", "early_overview_through": 0}, _f,
+                        ensure_ascii=False)
+    except Exception:
         pass
     st.session_state.story_started = True
     is_final = s["total_chapters"] == 1
