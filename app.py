@@ -814,8 +814,17 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
                 unsafe_allow_html=True,
             )
     except Exception as e:
-        if ("429" in str(e) or "rate" in str(e).lower() or "quota" in str(e).lower()) and _fallback_client(active_client) is not active_client:
-            st.warning(f"⚠️ 主 API 達到速率限制，自動切換備用 API 重試…")
+        _err = str(e)
+        _should_fallback = (
+            "429" in _err
+            or "402" in _err
+            or "rate" in _err.lower()
+            or "quota" in _err.lower()
+            or "insufficient" in _err.lower()
+            or "balance" in _err.lower()
+        )
+        if _should_fallback and _fallback_client(active_client) is not active_client:
+            st.warning(f"⚠️ 主 API 無法使用（{_err[:80]}），自動切換備用 API 重試…")
             active_client = _fallback_client(active_client)
             full_text = ""
             for chunk in stream_chapter(
