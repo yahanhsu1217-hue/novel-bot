@@ -876,7 +876,7 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
     b["used_tropes"] = (b["used_tropes"] + bible_update.get("used_tropes", []))[-20:]
     b["open_threads"] = bible_update.get("open_threads", b["open_threads"])
     b.setdefault("established_facts", [])
-    b["established_facts"] = (b["established_facts"] + bible_update.get("established_facts", []))[-80:]
+    b["established_facts"] = [x for x in (b["established_facts"] + bible_update.get("established_facts", [])) if isinstance(x, str)][-80:]
     b.setdefault("asked_questions", [])
     b["asked_questions"] = list(dict.fromkeys(b["asked_questions"] + bible_update.get("asked_questions", [])))  # deduplicate, keep all
     _save_session()
@@ -988,7 +988,7 @@ else:
         st.caption("若 AI 記錯了事實（如角色位置、能力狀態），可在此直接修改或刪除，下次生成時立即生效。刪除已移除角色的相關條目，可防止 AI 繼續引用。")
         _b = st.session_state.story_bible
         with st.expander("已確立的故事事實 (established_facts)", expanded=False):
-            _ef_text = "\n".join(_b.get("established_facts", []))
+            _ef_text = "\n".join(x for x in _b.get("established_facts", []) if isinstance(x, str))
             _ef_edited = st.text_area(
                 "每行一條事實",
                 value=_ef_text,
@@ -1050,7 +1050,7 @@ else:
                     b["banned_phrases"] = (b["banned_phrases"] + _new_bible.get("banned_phrases", []))[-40:]
                     b["used_tropes"] = (b["used_tropes"] + _new_bible.get("used_tropes", []))[-20:]
                     b.setdefault("established_facts", [])
-                    b["established_facts"] = (b["established_facts"] + _new_bible.get("established_facts", []))[-80:]
+                    b["established_facts"] = [x for x in (b["established_facts"] + _new_bible.get("established_facts", [])) if isinstance(x, str)][-80:]
                     b.setdefault("asked_questions", [])
                     b["asked_questions"] = (b["asked_questions"] + _new_bible.get("asked_questions", []))[-60:]
                     if _new_bible.get("open_threads"):

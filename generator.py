@@ -818,7 +818,7 @@ def stream_chapter(
             threads = "\n".join(f"- {t}" for t in story_bible["open_threads"])
             parts.append(f"【未解決的伏筆（必須在後續章節回應）】\n{threads}")
         if story_bible.get("established_facts"):
-            facts = "\n".join(f"- {f}" for f in story_bible["established_facts"])
+            facts = "\n".join(f"- {f}" for f in story_bible["established_facts"] if isinstance(f, str))
             parts.append(
                 f"【⚠️ 已確立的故事事實 — 必須全部記住，絕對不可違背】\n"
                 f"以下每一條都是前面章節已明確建立的事實，包括角色位置、關係現況、能力狀態、重要物品。\n"
