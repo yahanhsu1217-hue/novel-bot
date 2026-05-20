@@ -205,7 +205,7 @@ def extract_paragraph_starters(chapter_text: str, min_len: int = 12) -> list[str
     return starters
 
 
-def fix_cross_chapter_repetition(client: OpenAI, new_chapter: str, prev_chapters: list[str]) -> str:
+def fix_cross_chapter_repetition(client: OpenAI, new_chapter: str, prev_chapters: list[str], nsfw: bool = False) -> str:
     """Detect paragraphs in new_chapter that duplicate any paragraph from all previous chapters and rewrite them."""
     new_paras = [p.strip() for p in new_chapter.split('\n\n') if p.strip() and len(p.strip()) > 30]
     prev_para_keys: set[str] = set()
@@ -224,6 +224,11 @@ def fix_cross_chapter_repetition(client: OpenAI, new_chapter: str, prev_chapters
         return new_chapter
 
     dup_list = "\n".join(f"- {d}…" for d in dup_keys[:15])
+    nsfw_rule = (
+        "\n- 【限制級】改寫後必須維持原段落的明確程度與細節密度，不可將情色描寫改淡或省略；"
+        "身體部位仍用具體詞彙，感官細節仍須完整"
+        if nsfw else ""
+    )
     resp = client.chat.completions.create(
         model=_model_for(client),
         messages=[{"role": "user", "content":
@@ -233,7 +238,7 @@ def fix_cross_chapter_repetition(client: OpenAI, new_chapter: str, prev_chapters
             "- 只改寫與前章重複的段落，其餘段落完全保留、逐字不動\n"
             "- 改寫必須用全新角度、不同細節、不同句型，不可只換幾個詞\n"
             "- 改寫後必須與上下文連貫，內容推進方向不變\n"
-            "- 直接輸出完整章節正文，不加任何說明或標記\n"
+            f"- 直接輸出完整章節正文，不加任何說明或標記{nsfw_rule}\n"
             "- 必須輸出完整全文，不可截斷\n\n"
             f"{new_chapter}"
         }],
@@ -967,6 +972,18 @@ def stream_chapter(
         if chapter_directive.strip() else ""
     )
 
+    _nsfw_reminder = (
+        "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "【🔞 限制級寫作最終確認 — 動筆前逐條核對，全部必須執行】\n"
+        "① 若本章有親密場景，必須完整展開五個階段（前戲→升溫→對話心理→高潮→餘韻），每階段不少於150字\n"
+        "② 身體部位用具體情色詞彙，嚴禁「那裡」「它」等模糊代稱\n"
+        "③ 每個動作必須描寫外觀＋質感＋狀態三項，缺一即不完整\n"
+        "④ 高潮段落必須描寫顫抖、聲音、液體、身體失控細節，不可用省略號帶過\n"
+        "⑤ 場景密度不可低於第一章；若發現自己在用更少字描寫同樣的事，立刻補足\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        if nsfw else ""
+    )
+
     if chapter_num == 1:
         prompt = f"""{directive_block + chr(10) + chr(10) if directive_block else ""}故事設定：
 {setting_block}
@@ -981,7 +998,7 @@ def stream_chapter(
 請創作第一章，建立世界氛圍與角色，帶出故事開端{"，給出完整結局。" if is_final else "，結尾留下讓人想繼續讀的鉤子。"}
 {length_block}
 {style_block}
-{directive_block}
+{directive_block}{_nsfw_reminder}
 直接輸出故事正文，格式如下：
 
 第一章　[章節標題]
@@ -1022,7 +1039,7 @@ def stream_chapter(
 1. 本章開場必須直接承接以下最後一幕的時間點與地點，不可跳過或無視
 2. 角色所在地點與上一章結尾一致；若需換場景，必須在正文中明確交代移動過程
 {context}
-
+{_nsfw_reminder}
 直接輸出故事正文，格式如下：
 
 第{chapter_num}章　[章節標題]

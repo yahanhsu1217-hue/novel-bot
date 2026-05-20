@@ -835,7 +835,7 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
             )
     if len(st.session_state.chapters) >= 1:
         with st.spinner("🔁 全文跨章重複段落偵測…"):
-            full_text = fix_cross_chapter_repetition(active_client, full_text, st.session_state.chapters)
+            full_text = fix_cross_chapter_repetition(active_client, full_text, st.session_state.chapters, nsfw=settings.get("nsfw", False))
             if preserve_ending:
                 full_text = _trim_to_original_end(full_text[:_pre_fix_len], full_text)
             placeholder.markdown(
