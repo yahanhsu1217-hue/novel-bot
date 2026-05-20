@@ -1145,7 +1145,11 @@ else:
                 else:
                     _keep = i - _ov_through
                     st.session_state.summaries = st.session_state.summaries[:_keep]
+                _regen_inst = st.session_state.get(f"rewrite_inst_{i}", "").strip()
+                if _regen_inst and st.session_state.get(f"rewrite_as_ending_{i}", False):
+                    _regen_inst += _DIRECTIVE_AS_ENDING_RULE
                 new_text = generate_chapter(s, chapter_num=i + 1, prev_text=prev_text, is_final=is_final,
+                                            directive=_regen_inst,
                                             style_reference=st.session_state.get("w_style_reference", ""))
                 st.session_state.chapters[i] = new_text
                 st.rerun()
