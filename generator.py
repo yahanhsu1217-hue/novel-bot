@@ -30,6 +30,7 @@ def summarize_chapter(client: OpenAI, chapter_text: str, chapter_num: int) -> tu
             f'  "banned_phrases": ["逐字列出本章出現、後續不可重複的具體語句或句型，至少5條"],\n'
             f'  "used_tropes": ["本章使用的情感或劇情套路"],\n'
             f'  "open_threads": ["尚未解決的伏筆或承諾，例如某角色說有話要說但未說"],\n'
+            f'  "asked_questions": ["本章中任何角色問過主角的所有問題，逐條概括，例如：你有喜歡的人嗎、你養過寵物嗎、你去過哪些地方、你的家人是做什麼的——哪怕是閒聊性質的問題也要列出"],\n'
             f'  "established_facts": ["本章確立的所有事實，必須涵蓋以下四類，格式：實體+狀態——'
             f'①世界觀與環境：地點規則、重要物品、角色所在位置；'
             f'②角色能力與經歷：技能、異能、職業、過去經歷；'
@@ -817,6 +818,14 @@ def stream_chapter(
                 f"【⚠️ 已確立的故事事實 — 必須全部記住，絕對不可違背】\n"
                 f"以下每一條都是前面章節已明確建立的事實，包括角色位置、關係現況、能力狀態、重要物品。\n"
                 f"後續章節不得推翻、忽略、遺忘或與之矛盾，違反任何一條即視為失敗：\n{facts}"
+            )
+        if story_bible.get("asked_questions"):
+            recent_qs = story_bible["asked_questions"][-40:]
+            qs_str = "\n".join(f"- {q}" for q in recent_qs)
+            parts.append(
+                f"【⚠️ 已問過的問題 — 嚴禁重複】\n"
+                f"以下問題在前面章節已經問過，本章任何角色都不可以再問相同或意思相近的問題：\n"
+                f"{qs_str}"
             )
         if story_bible.get("paragraph_starters"):
             # Inject most recent 70 starters — prevent verbatim paragraph reuse across chapters

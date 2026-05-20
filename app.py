@@ -92,7 +92,7 @@ if "_settings_initialized" not in st.session_state:
             _sess = json.load(_f)
         st.session_state["chapters"]              = _sess.get("chapters", [])
         st.session_state["summaries"]             = _sess.get("summaries", [])
-        st.session_state["story_bible"]           = _sess.get("story_bible", {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": []})
+        st.session_state["story_bible"]           = _sess.get("story_bible", {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": [], "asked_questions": []})
         st.session_state["saved_settings"]        = _sess.get("saved_settings", {})
         st.session_state["early_overview"]        = _sess.get("early_overview", "")
         st.session_state["early_overview_through"] = _sess.get("early_overview_through", 0)
@@ -108,7 +108,7 @@ for k, v in [
     ("saved_settings", {}),
     ("num_extra_chars", 0),
     ("last_loaded_file", None),
-    ("story_bible", {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": []}),
+    ("story_bible", {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": [], "asked_questions": []}),
     # Widget defaults
     ("w_world_mode",      "作品世界"),
     ("w_world_input",     ""),
@@ -320,7 +320,7 @@ with st.sidebar:
         if _parsed:
             st.session_state.chapters    = _parsed
             st.session_state.summaries   = []
-            st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": []}
+            st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": [], "asked_questions": []}
             st.session_state.story_started = True
             st.session_state["_last_novel_upload"] = _novel_file.name
             try:
@@ -875,9 +875,10 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
     b["banned_phrases"] = (b["banned_phrases"] + bible_update.get("banned_phrases", []))[-40:]
     b["used_tropes"] = (b["used_tropes"] + bible_update.get("used_tropes", []))[-20:]
     b["open_threads"] = bible_update.get("open_threads", b["open_threads"])
-    # Accumulate established facts (cap at 40 to prevent prompt bloat)
     b.setdefault("established_facts", [])
     b["established_facts"] = (b["established_facts"] + bible_update.get("established_facts", []))[-80:]
+    b.setdefault("asked_questions", [])
+    b["asked_questions"] = (b["asked_questions"] + bible_update.get("asked_questions", []))[-60:]
     _save_session()
     return full_text
 
@@ -896,7 +897,7 @@ if start_btn:
         pass
     st.session_state.chapters = []
     st.session_state.summaries = []
-    st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": []}
+    st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": [], "asked_questions": []}
     st.session_state.early_overview = ""
     st.session_state.early_overview_through = 0
     st.session_state.saved_settings = s
@@ -1050,6 +1051,8 @@ else:
                     b["used_tropes"] = (b["used_tropes"] + _new_bible.get("used_tropes", []))[-20:]
                     b.setdefault("established_facts", [])
                     b["established_facts"] = (b["established_facts"] + _new_bible.get("established_facts", []))[-80:]
+                    b.setdefault("asked_questions", [])
+                    b["asked_questions"] = (b["asked_questions"] + _new_bible.get("asked_questions", []))[-60:]
                     if _new_bible.get("open_threads"):
                         b["open_threads"] = _new_bible["open_threads"]
                     _save_session()
