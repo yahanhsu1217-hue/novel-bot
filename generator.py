@@ -30,7 +30,11 @@ def summarize_chapter(client: OpenAI, chapter_text: str, chapter_num: int) -> tu
             f'  "banned_phrases": ["逐字列出本章出現、後續不可重複的具體語句或句型，至少5條"],\n'
             f'  "used_tropes": ["本章使用的情感或劇情套路"],\n'
             f'  "open_threads": ["尚未解決的伏筆或承諾，例如某角色說有話要說但未說"],\n'
-            f'  "established_facts": ["本章確立的世界觀事實、角色能力、角色技能、角色所在位置、重要物品擁有狀態、人物關係等，格式：實體+狀態，例如：主角會騎機車且車庫有機車、主角目前無任何異能、A角色在B地點、主角不知道X秘密、主角擁有一把手槍"]\n'
+            f'  "established_facts": ["本章確立的所有事實，必須涵蓋以下四類，格式：實體+狀態——'
+            f'①世界觀與環境：地點規則、重要物品、角色所在位置；'
+            f'②角色能力與經歷：技能、異能、職業、過去經歷；'
+            f'③主角個人自我揭露：主角在對話或旁白中說過的關於自己的任何個人資訊，例如：主角說自己沒養過寵物、主角說媽媽對毛過敏、主角說自己目前沒有喜歡的人、主角說自己從未去過某地——這類事實必須逐條列出，不可省略；'
+            f'④人物關係現況：誰知道什麼秘密、誰對誰有什麼感受、已確認的關係狀態"]\n'
             f"}}\n\n{chapter_text}"
         }],
         max_tokens=1600,
@@ -726,6 +730,7 @@ def stream_chapter(
     total_chapters: int = 5,
     is_final: bool = False,
     character_notes: str = "",
+    protagonist_facts: str = "",
     prev_summaries: list[str] | None = None,
     environment: str = "",
     residence: str = "",
@@ -750,6 +755,18 @@ def stream_chapter(
         f"【原作角色外貌與設定（以下為準，不可違背，優先於你的記憶）】\n{character_notes}"
         if character_notes else ""
     )
+
+    facts_block = ""
+    if protagonist_facts.strip():
+        lines = "\n".join(
+            f"- {l.strip()}" for l in protagonist_facts.strip().splitlines() if l.strip()
+        )
+        facts_block = (
+            f"【⚠️ 主角已確立的個人事實 — 最高優先級，每一條都是主角說過的真實資訊，絕對不可矛盾】\n"
+            f"以下每一條都是主角在故事中已明確說過或確立的個人事實。\n"
+            f"任何角色問到相關問題時，主角的回答必須與以下事實完全一致，不可前後矛盾：\n"
+            f"{lines}"
+        )
 
     history_block = ""
     if prev_summaries:
@@ -898,6 +915,7 @@ def stream_chapter(
         env_block,
         geo_block,
         notes_block,
+        facts_block,
         name_ref_block,
         _cp_str(cp_type, cp_characters, name, nsfw),
         pacing_block,

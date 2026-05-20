@@ -64,7 +64,7 @@ if "_settings_initialized" not in st.session_state:
                      "perspective", "length_label", "total_chapters", "cp_type",
                      "love_tone", "pacing",
                      "name", "nickname", "gender", "personality", "appearance",
-                     "residence", "background", "plot_want", "plot_forbid",
+                     "residence", "background", "protagonist_facts", "plot_want", "plot_forbid",
                      "environment", "nsfw", "style_reference"]:
             if _key in _last:
                 st.session_state[f"w_{_key}"] = _last[_key]
@@ -128,8 +128,9 @@ for k, v in [
     ("w_personality",     ""),
     ("w_appearance",      ""),
     ("w_residence",       ""),
-    ("w_background",      ""),
-    ("w_plot_want",       ""),
+    ("w_background",          ""),
+    ("w_protagonist_facts",   ""),
+    ("w_plot_want",           ""),
     ("w_plot_forbid",     ""),
     ("w_nsfw",            False),
     ("w_style_sample",    ""),
@@ -251,6 +252,7 @@ with st.sidebar:
             "appearance":       st.session_state.get("w_appearance",        ""),
             "residence":        st.session_state.get("w_residence",         ""),
             "background":       st.session_state.get("w_background",        ""),
+            "protagonist_facts": st.session_state.get("w_protagonist_facts", ""),
             "plot_want":        st.session_state.get("w_plot_want",         ""),
             "plot_forbid":      st.session_state.get("w_plot_forbid",       ""),
             "nsfw":             st.session_state.get("w_nsfw",              False),
@@ -526,6 +528,13 @@ with st.sidebar:
     appearance  = st.text_area("外貌",    key="w_appearance",  placeholder="例：長黑髮、眼神銳利…",          height=72)
     residence   = st.text_input("住的地方", key="w_residence",  placeholder="例：廢棄工廠頂樓、學生宿舍302室…")
     background  = st.text_area("背景故事", key="w_background",  placeholder="例：記憶缺失的前特工…",           height=90)
+    protagonist_facts = st.text_area(
+        "主角固定事實",
+        key="w_protagonist_facts",
+        placeholder="每行一條，寫故事中已說過、不能被推翻的個人資訊。例如：\n媽媽對毛過敏，從沒養過寵物\n目前沒有喜歡的人\n從未去過日本\n不會游泳",
+        height=100,
+        help="這裡的每一條都會在每一章強制告訴 AI，絕對不能讓主角說出矛盾的話。",
+    )
 
     st.divider()
 
@@ -698,6 +707,7 @@ def _collect_settings() -> dict:
         appearance=appearance.strip(),
         background=background.strip(),
         extra_characters=extra_characters,
+        protagonist_facts=protagonist_facts.strip(),
         plot_want=plot_want.strip(),
         plot_forbid=plot_forbid.strip(),
         total_chapters=int(total_chapters),
