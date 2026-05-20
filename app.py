@@ -764,6 +764,30 @@ _COMPRESS_THRESHOLD = 12
 _RECENT_KEEP = 8
 
 
+def _flatten_facts(raw):
+    """Normalize established_facts from AI: handle dict/list/nested returns."""
+    if isinstance(raw, dict):
+        raw = list(raw.values())
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for item in raw:
+        if isinstance(item, str):
+            out.append(item)
+        elif isinstance(item, dict):
+            out.extend(v for v in item.values() if isinstance(v, str))
+        elif isinstance(item, list):
+            out.extend(v for v in item if isinstance(v, str))
+    return out
+
+
+def _flatten_strs(raw):
+    """Normalize a list field from AI: handle dict returns, keep only strings."""
+    if isinstance(raw, dict):
+        raw = list(raw.values())
+    return [x for x in (raw if isinstance(raw, list) else []) if isinstance(x, str)]
+
+
 def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_final: bool = False, directive: str = "", style_reference: str = "", preserve_ending: bool = False):
     full_text = ""
     placeholder = st.empty()
@@ -876,9 +900,9 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
     b["used_tropes"] = (b["used_tropes"] + bible_update.get("used_tropes", []))[-20:]
     b["open_threads"] = bible_update.get("open_threads", b["open_threads"])
     b.setdefault("established_facts", [])
-    b["established_facts"] = [x for x in (b["established_facts"] + bible_update.get("established_facts", [])) if isinstance(x, str)][-80:]
+    b["established_facts"] = (_flatten_facts(b["established_facts"]) + _flatten_facts(bible_update.get("established_facts", [])))[-80:]
     b.setdefault("asked_questions", [])
-    b["asked_questions"] = list(dict.fromkeys(b["asked_questions"] + bible_update.get("asked_questions", [])))  # deduplicate, keep all
+    b["asked_questions"] = list(dict.fromkeys(_flatten_strs(b["asked_questions"]) + _flatten_strs(bible_update.get("asked_questions", []))))
     _save_session()
     return full_text
 
@@ -1050,9 +1074,9 @@ else:
                     b["banned_phrases"] = (b["banned_phrases"] + _new_bible.get("banned_phrases", []))[-40:]
                     b["used_tropes"] = (b["used_tropes"] + _new_bible.get("used_tropes", []))[-20:]
                     b.setdefault("established_facts", [])
-                    b["established_facts"] = [x for x in (b["established_facts"] + _new_bible.get("established_facts", [])) if isinstance(x, str)][-80:]
+                    b["established_facts"] = (_flatten_facts(b["established_facts"]) + _flatten_facts(_new_bible.get("established_facts", [])))[-80:]
                     b.setdefault("asked_questions", [])
-                    b["asked_questions"] = (b["asked_questions"] + _new_bible.get("asked_questions", []))[-60:]
+                    b["asked_questions"] = list(dict.fromkeys(_flatten_strs(b["asked_questions"]) + _flatten_strs(_new_bible.get("asked_questions", []))))
                     if _new_bible.get("open_threads"):
                         b["open_threads"] = _new_bible["open_threads"]
                     _save_session()
