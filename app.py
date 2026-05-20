@@ -1224,6 +1224,75 @@ else:
                     else:
                         st.warning("請填寫問題說明。")
 
+        # ── Continue / Ending buttons (inside tab so generation streams here) ──
+        if st.session_state.story_started:
+            st.divider()
+            if not _has_settings:
+                st.warning("載入設定檔（.json）後，才能使用 AI 繼續生成下一章或結局。")
+            st.markdown("#### 📌 下一章特別指示")
+            st.text_area(
+                "下一章特別指示", key=f"next_dir_{st.session_state._dir_ver}",
+                placeholder="例：這章以回憶展開、發生停電意外、CP 獨處…（留空則由 AI 自由發揮）",
+                height=80, label_visibility="collapsed",
+            )
+            st.checkbox(
+                "以此指示作為本章結尾（AI 寫到指示事件後立即收章）",
+                key=f"next_dir_as_ending_{st.session_state._dir_ver}",
+            )
+            st.markdown("#### 📌 下下章特別指示")
+            st.caption("生成下一章後自動移入上方「下一章特別指示」")
+            st.text_area(
+                "下下章特別指示", key="w_next_next_dir",
+                placeholder="預先填入，生成下一章後自動帶入…",
+                height=80, label_visibility="collapsed",
+            )
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                continue_btn = st.button("➡️ 繼續下一章", type="primary", use_container_width=True, disabled=not _has_settings)
+            with btn_col2:
+                ending_btn = st.button("🎬 寫結局", use_container_width=True, disabled=not _has_settings)
+
+            if continue_btn:
+                s = _collect_settings()
+                st.session_state.saved_settings = s
+                chapter_num = len(st.session_state.chapters) + 1
+                is_final = chapter_num >= s["total_chapters"]
+                _directive = st.session_state.get(f"next_dir_{st.session_state._dir_ver}", "")
+                _dir_as_ending = st.session_state.get(f"next_dir_as_ending_{st.session_state._dir_ver}", False)
+                _next_next = st.session_state.get("w_next_next_dir", "")
+                if _dir_as_ending and _directive.strip():
+                    _directive += _DIRECTIVE_AS_ENDING_RULE
+                st.session_state._dir_ver += 1
+                if _next_next.strip():
+                    st.session_state[f"next_dir_{st.session_state._dir_ver}"] = _next_next
+                    st.session_state["w_next_next_dir"] = ""
+                chapter_text = generate_chapter(s, chapter_num=chapter_num,
+                                                prev_text=st.session_state.chapters[-1],
+                                                is_final=is_final, directive=_directive,
+                                                style_reference=st.session_state.get("w_style_reference", ""),
+                                                preserve_ending=_dir_as_ending)
+                st.session_state.chapters.append(chapter_text)
+                st.rerun()
+
+            if ending_btn:
+                s = _collect_settings()
+                st.session_state.saved_settings = s
+                chapter_num = len(st.session_state.chapters) + 1
+                _directive = st.session_state.get(f"next_dir_{st.session_state._dir_ver}", "")
+                _dir_as_ending = st.session_state.get(f"next_dir_as_ending_{st.session_state._dir_ver}", False)
+                if _dir_as_ending and _directive.strip():
+                    _directive += _DIRECTIVE_AS_ENDING_RULE
+                st.session_state._dir_ver += 1
+                st.session_state["w_next_next_dir"] = ""
+                chapter_text = generate_chapter(s, chapter_num=chapter_num,
+                                                prev_text=st.session_state.chapters[-1],
+                                                is_final=True, directive=_directive,
+                                                style_reference=st.session_state.get("w_style_reference", ""),
+                                                preserve_ending=_dir_as_ending)
+                st.session_state.chapters.append(chapter_text)
+                st.session_state.story_started = False
+                st.rerun()
+
     # ── Chapter navigator (floating right panel) ──────────────────────────────
     _nav_titles = []
     for _ci, _ct in enumerate(st.session_state.chapters):
@@ -1315,76 +1384,6 @@ else:
 }})();
 </script>
 """, height=0, scrolling=False)
-
-    st.divider()
-
-    # ── Continue / Ending buttons ─────────────────────────────────────────────
-    if st.session_state.story_started:
-        if not _has_settings:
-            st.warning("載入設定檔（.json）後，才能使用 AI 繼續生成下一章或結局。")
-        st.markdown("#### 📌 下一章特別指示")
-        st.text_area(
-            "下一章特別指示", key=f"next_dir_{st.session_state._dir_ver}",
-            placeholder="例：這章以回憶展開、發生停電意外、CP 獨處…（留空則由 AI 自由發揮）",
-            height=80, label_visibility="collapsed",
-        )
-        st.checkbox(
-            "以此指示作為本章結尾（AI 寫到指示事件後立即收章）",
-            key=f"next_dir_as_ending_{st.session_state._dir_ver}",
-        )
-        st.markdown("#### 📌 下下章特別指示")
-        st.caption("生成下一章後自動移入上方「下一章特別指示」")
-        st.text_area(
-            "下下章特別指示", key="w_next_next_dir",
-            placeholder="預先填入，生成下一章後自動帶入…",
-            height=80, label_visibility="collapsed",
-        )
-        btn_col1, btn_col2 = st.columns(2)
-        with btn_col1:
-            continue_btn = st.button("➡️ 繼續下一章", type="primary", use_container_width=True, disabled=not _has_settings)
-        with btn_col2:
-            ending_btn = st.button("🎬 寫結局", use_container_width=True, disabled=not _has_settings)
-
-        if continue_btn:
-            s = _collect_settings()
-            st.session_state.saved_settings = s
-            chapter_num = len(st.session_state.chapters) + 1
-            is_final = chapter_num >= s["total_chapters"]
-            _directive = st.session_state.get(f"next_dir_{st.session_state._dir_ver}", "")
-            _dir_as_ending = st.session_state.get(f"next_dir_as_ending_{st.session_state._dir_ver}", False)
-            _next_next = st.session_state.get("w_next_next_dir", "")
-            if _dir_as_ending and _directive.strip():
-                _directive += _DIRECTIVE_AS_ENDING_RULE
-            st.session_state._dir_ver += 1
-            if _next_next.strip():
-                st.session_state[f"next_dir_{st.session_state._dir_ver}"] = _next_next
-                st.session_state["w_next_next_dir"] = ""
-            chapter_text = generate_chapter(s, chapter_num=chapter_num,
-                                            prev_text=st.session_state.chapters[-1],
-                                            is_final=is_final, directive=_directive,
-                                            style_reference=st.session_state.get("w_style_reference", ""),
-                                            preserve_ending=_dir_as_ending)
-            st.session_state.chapters.append(chapter_text)
-            st.rerun()
-
-        if ending_btn:
-            s = _collect_settings()
-            st.session_state.saved_settings = s
-            chapter_num = len(st.session_state.chapters) + 1
-            _directive = st.session_state.get(f"next_dir_{st.session_state._dir_ver}", "")
-            _dir_as_ending = st.session_state.get(f"next_dir_as_ending_{st.session_state._dir_ver}", False)
-            if _dir_as_ending and _directive.strip():
-                _directive += _DIRECTIVE_AS_ENDING_RULE
-            st.session_state._dir_ver += 1
-            st.session_state["w_next_next_dir"] = ""
-            chapter_text = generate_chapter(s, chapter_num=chapter_num,
-                                            prev_text=st.session_state.chapters[-1],
-                                            is_final=True, directive=_directive,
-                                            style_reference=st.session_state.get("w_style_reference", ""),
-                                            preserve_ending=_dir_as_ending)
-            st.session_state.chapters.append(chapter_text)
-            st.session_state.story_started = False
-            st.rerun()
 
     st.divider()
     full_novel = "\n\n\n".join(st.session_state.chapters)
