@@ -166,6 +166,9 @@ def _fallback_client(primary):
     return primary
 
 def _get_active_client() -> OpenAI:
+    # NSFW mode: always use DeepSeek (Gemini has content filters)
+    if st.session_state.get("w_nsfw", False) and _deepseek_client:
+        return _deepseek_client
     sel = st.session_state.get("w_ai_provider", "Gemini")
     if sel == "Gemini" and _gemini_client:
         return _gemini_client
@@ -198,7 +201,10 @@ with st.sidebar:
         label_visibility="collapsed",
         key="w_ai_provider",
     )
-    if _selected == "Gemini":
+    _nsfw_on = st.session_state.get("w_nsfw", False)
+    if _nsfw_on and _deepseek_client:
+        st.caption("🔞 限制級模式：自動使用 DeepSeek（Gemini 有內容過濾）")
+    elif _selected == "Gemini":
         st.caption("✦ Gemini 2.0 Flash・免費・100 萬 token 記憶")
     else:
         st.caption("✦ DeepSeek Chat・付費・穩定備援")
