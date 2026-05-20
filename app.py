@@ -10,8 +10,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 from openai import OpenAI
 
-from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, LENGTH_CHARS
-from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency, fix_sensory_crutches, fix_repetitive_paragraphs, analyze_writing_style, STYLE_PRESETS, compress_old_summaries
+from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, GEMINI_API_KEY, GEMINI_BASE_URL, LENGTH_CHARS
+from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency, fix_sensory_crutches, fix_repetitive_paragraphs, fix_cross_chapter_repetition, extract_paragraph_starters, analyze_writing_style, STYLE_PRESETS, compress_old_summaries
 from training import ISSUE_TYPES, add_note, delete_note, load_notes, notes_to_prompt_block
 
 LAST_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_settings.json")
@@ -92,7 +92,7 @@ if "_settings_initialized" not in st.session_state:
             _sess = json.load(_f)
         st.session_state["chapters"]              = _sess.get("chapters", [])
         st.session_state["summaries"]             = _sess.get("summaries", [])
-        st.session_state["story_bible"]           = _sess.get("story_bible", {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": []})
+        st.session_state["story_bible"]           = _sess.get("story_bible", {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": []})
         st.session_state["saved_settings"]        = _sess.get("saved_settings", {})
         st.session_state["early_overview"]        = _sess.get("early_overview", "")
         st.session_state["early_overview_through"] = _sess.get("early_overview_through", 0)
@@ -108,7 +108,7 @@ for k, v in [
     ("saved_settings", {}),
     ("num_extra_chars", 0),
     ("last_loaded_file", None),
-    ("story_bible", {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": []}),
+    ("story_bible", {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": []}),
     # Widget defaults
     ("w_world_mode",      "作品世界"),
     ("w_world_input",     ""),
@@ -142,18 +142,67 @@ for k, v in [
     if k not in st.session_state:
         st.session_state[k] = v
 
-# ── API client ────────────────────────────────────────────────────────────────
+# ── API clients ───────────────────────────────────────────────────────────────
 
-if not DEEPSEEK_API_KEY:
-    st.error("❌ DEEPSEEK_API_KEY 未設定，請在 .env 檔案中加入 API 金鑰。")
+if not DEEPSEEK_API_KEY and not GEMINI_API_KEY:
+    st.error("❌ 請在 .env 檔案中設定 DEEPSEEK_API_KEY 或 GEMINI_API_KEY。")
     st.stop()
 
-client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+_gemini_client = (
+    OpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL)
+    if GEMINI_API_KEY else None
+)
+_deepseek_client = (
+    OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+    if DEEPSEEK_API_KEY else None
+)
+
+def _fallback_client(primary):
+    """Return the other client when primary hits rate limit."""
+    if primary is _gemini_client and _deepseek_client:
+        return _deepseek_client
+    if primary is _deepseek_client and _gemini_client:
+        return _gemini_client
+    return primary
+
+def _get_active_client() -> OpenAI:
+    sel = st.session_state.get("w_ai_provider", "Gemini")
+    if sel == "Gemini" and _gemini_client:
+        return _gemini_client
+    if sel == "DeepSeek" and _deepseek_client:
+        return _deepseek_client
+    return _gemini_client or _deepseek_client
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
     st.markdown("## 📖 故事設定")
+
+    # ── AI Provider ───────────────────────────────────────────────────────────
+    st.markdown("### 🤖 AI 模型選擇")
+    _provider_options = []
+    if _gemini_client:
+        _provider_options.append("Gemini")
+    if _deepseek_client:
+        _provider_options.append("DeepSeek")
+    if not _provider_options:
+        _provider_options = ["Gemini"]
+    _default_provider = st.session_state.get("w_ai_provider", _provider_options[0])
+    if _default_provider not in _provider_options:
+        _default_provider = _provider_options[0]
+    _selected = st.radio(
+        "選擇 AI",
+        _provider_options,
+        index=_provider_options.index(_default_provider),
+        horizontal=True,
+        label_visibility="collapsed",
+        key="w_ai_provider",
+    )
+    if _selected == "Gemini":
+        st.caption("✦ Gemini 2.0 Flash・免費・100 萬 token 記憶")
+    else:
+        st.caption("✦ DeepSeek Chat・付費・穩定備援")
+    st.divider()
 
     # ── Save / Load ───────────────────────────────────────────────────────────
     st.markdown("### 💾 儲存 / 載入設定")
@@ -263,7 +312,7 @@ with st.sidebar:
         if _parsed:
             st.session_state.chapters    = _parsed
             st.session_state.summaries   = []
-            st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": []}
+            st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": []}
             st.session_state.story_started = True
             st.session_state["_last_novel_upload"] = _novel_file.name
             try:
@@ -702,29 +751,58 @@ _RECENT_KEEP = 8
 def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_final: bool = False, directive: str = "", style_reference: str = "", preserve_ending: bool = False):
     full_text = ""
     placeholder = st.empty()
-    for chunk in stream_chapter(
-        client=client,
-        chapter_num=chapter_num,
-        prev_chapter_text=prev_text,
-        is_final=is_final,
-        prev_summaries=st.session_state.summaries,
-        story_bible=st.session_state.story_bible,
-        training_notes=load_notes(),
-        chapter_directive=directive,
-        style_reference=style_reference,
-        early_overview=st.session_state.get("early_overview", ""),
-        summary_offset=st.session_state.get("early_overview_through", 0),
-        **settings,
-    ):
-        full_text += chunk
-        placeholder.markdown(
-            f'<div class="chapter-box">{full_text}</div>',
-            unsafe_allow_html=True,
+    active_client = _get_active_client()
+    try:
+        stream_iter = stream_chapter(
+            client=active_client,
+            chapter_num=chapter_num,
+            prev_chapter_text=prev_text,
+            is_final=is_final,
+            prev_summaries=st.session_state.summaries,
+            story_bible=st.session_state.story_bible,
+            training_notes=load_notes(),
+            chapter_directive=directive,
+            style_reference=style_reference,
+            early_overview=st.session_state.get("early_overview", ""),
+            summary_offset=st.session_state.get("early_overview_through", 0),
+            **settings,
         )
+        for chunk in stream_iter:
+            full_text += chunk
+            placeholder.markdown(
+                f'<div class="chapter-box">{full_text}</div>',
+                unsafe_allow_html=True,
+            )
+    except Exception as e:
+        if ("429" in str(e) or "rate" in str(e).lower() or "quota" in str(e).lower()) and _fallback_client(active_client) is not active_client:
+            st.warning(f"⚠️ 主 API 達到速率限制，自動切換備用 API 重試…")
+            active_client = _fallback_client(active_client)
+            full_text = ""
+            for chunk in stream_chapter(
+                client=active_client,
+                chapter_num=chapter_num,
+                prev_chapter_text=prev_text,
+                is_final=is_final,
+                prev_summaries=st.session_state.summaries,
+                story_bible=st.session_state.story_bible,
+                training_notes=load_notes(),
+                chapter_directive=directive,
+                style_reference=style_reference,
+                early_overview=st.session_state.get("early_overview", ""),
+                summary_offset=st.session_state.get("early_overview_through", 0),
+                **settings,
+            ):
+                full_text += chunk
+                placeholder.markdown(
+                    f'<div class="chapter-box">{full_text}</div>',
+                    unsafe_allow_html=True,
+                )
+        else:
+            raise
     _pre_fix_len = len(full_text) if preserve_ending else 0
     if settings.get("nsfw"):
         with st.spinner("✍️ 修正重複段落…"):
-            full_text = fix_repetitive_paragraphs(client, full_text, preserve_ending=preserve_ending)
+            full_text = fix_repetitive_paragraphs(active_client, full_text, preserve_ending=preserve_ending)
             if preserve_ending:
                 full_text = _trim_to_original_end(full_text[:_pre_fix_len], full_text)
             placeholder.markdown(
@@ -732,7 +810,16 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
                 unsafe_allow_html=True,
             )
         with st.spinner("✍️ 改寫重複感知句式…"):
-            full_text = fix_sensory_crutches(client, full_text, preserve_ending=preserve_ending)
+            full_text = fix_sensory_crutches(active_client, full_text, preserve_ending=preserve_ending)
+            if preserve_ending:
+                full_text = _trim_to_original_end(full_text[:_pre_fix_len], full_text)
+            placeholder.markdown(
+                f'<div class="chapter-box">{full_text}</div>',
+                unsafe_allow_html=True,
+            )
+    if len(st.session_state.chapters) >= 1:
+        with st.spinner("🔁 全文跨章重複段落偵測…"):
+            full_text = fix_cross_chapter_repetition(active_client, full_text, st.session_state.chapters)
             if preserve_ending:
                 full_text = _trim_to_original_end(full_text[:_pre_fix_len], full_text)
             placeholder.markdown(
@@ -742,7 +829,7 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
     with st.spinner("🔍 校正內容一致性…"):
         protagonist_name = settings.get("name", "") if settings else ""
         extra_names = [c["name"] for c in (settings.get("extra_characters") or []) if c.get("name", "").strip()]
-        full_text = fix_consistency(client, full_text, protagonist_name, extra_names, settings.get("nickname", ""), preserve_ending=preserve_ending)
+        full_text = fix_consistency(active_client, full_text, protagonist_name, extra_names, settings.get("nickname", ""), preserve_ending=preserve_ending)
         if preserve_ending:
             full_text = _trim_to_original_end(full_text[:_pre_fix_len], full_text)
         placeholder.markdown(
@@ -750,8 +837,12 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
             unsafe_allow_html=True,
         )
     with st.spinner("📝 記錄章節記憶…"):
-        summary, bible_update = summarize_chapter(client, full_text, chapter_num)
+        summary, bible_update = summarize_chapter(active_client, full_text, chapter_num)
     st.session_state.summaries.append(summary)
+    # Extract paragraph starters for cross-chapter dedup prevention
+    b_pre = st.session_state.story_bible
+    b_pre.setdefault("paragraph_starters", [])
+    b_pre["paragraph_starters"].extend(extract_paragraph_starters(full_text))
     # Compress old summaries when list grows beyond threshold
     if len(st.session_state.summaries) > _COMPRESS_THRESHOLD:
         _old = st.session_state.summaries[:-_RECENT_KEEP]
@@ -789,7 +880,7 @@ if start_btn:
         pass
     st.session_state.chapters = []
     st.session_state.summaries = []
-    st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": []}
+    st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": []}
     st.session_state.early_overview = ""
     st.session_state.early_overview_through = 0
     st.session_state.saved_settings = s

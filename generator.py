@@ -5,14 +5,24 @@ import re as _re
 
 from openai import OpenAI
 
-from config import DEFAULT_MODEL, LENGTH_CHARS
+from config import DEFAULT_MODEL, GEMINI_MODEL, DEEPSEEK_MODEL, GEMINI_BASE_URL, LENGTH_CHARS
 from training import notes_to_prompt_block
+
+
+def _model_for(client: OpenAI) -> str:
+    """Pick the right model name based on which client is being used."""
+    try:
+        if GEMINI_BASE_URL.rstrip("/") in str(client.base_url):
+            return GEMINI_MODEL
+    except Exception:
+        pass
+    return DEEPSEEK_MODEL
 
 
 def summarize_chapter(client: OpenAI, chapter_text: str, chapter_num: int) -> tuple[str, dict]:
     """Generate chapter summary + extract story bible data. Returns (summary_str, bible_dict)."""
     resp = client.chat.completions.create(
-        model=DEFAULT_MODEL,
+        model=_model_for(client),
         messages=[{"role": "user", "content":
             f"分析第 {chapter_num} 章，只輸出 JSON，不要其他文字：\n"
             f"{{\n"
@@ -56,7 +66,7 @@ def compress_old_summaries(
         lines = "\n".join(f"第 {chapter_start + i} 章：{s}" for i, s in enumerate(old_summaries))
         parts.append(f"【待合併章節摘要】\n{lines}")
     resp = client.chat.completions.create(
-        model=DEFAULT_MODEL,
+        model=_model_for(client),
         messages=[{"role": "user", "content":
             "請將以下早期章節摘要合併為一段簡潔的「早期故事總覽」，供後續章節生成時參考。\n\n"
             "規則：\n"
@@ -75,7 +85,7 @@ def compress_old_summaries(
 def analyze_writing_style(client: OpenAI, sample_text: str) -> str:
     """Analyze a writing sample and return actionable style rules with concrete examples."""
     resp = client.chat.completions.create(
-        model=DEFAULT_MODEL,
+        model=_model_for(client),
         messages=[{"role": "user", "content":
             "請分析以下文章的寫作風格，輸出可直接讓另一位作者照做的具體規則清單。\n"
             "每條規則必須：①說明做法 ②從原文引用一個實際句子作為示範。\n\n"
@@ -113,7 +123,7 @@ def fix_repetitive_paragraphs(client: OpenAI, chapter_text: str, preserve_ending
         if preserve_ending else ""
     )
     resp = client.chat.completions.create(
-        model=DEFAULT_MODEL,
+        model=_model_for(client),
         messages=[{"role": "user", "content":
             "以下章節中存在逐字重複的段落（同一段文字出現兩次以上）。\n"
             "請找出所有重複的段落，將第二次及之後出現的改寫成推進場景的新內容：\n"
@@ -144,7 +154,7 @@ def fix_sensory_crutches(client: OpenAI, chapter_text: str, preserve_ending: boo
         if preserve_ending else ""
     )
     resp = client.chat.completions.create(
-        model=DEFAULT_MODEL,
+        model=_model_for(client),
         messages=[{"role": "user", "content":
             f"以下章節中，「她能X到」（如「她能感覺到」「她能聽到」「她能聞到」「她能看到」）的句式出現了 {count} 次，嚴重超標。\n"
             "請找出所有這類句子，逐一改寫為直接以名詞或動詞切入的句子，不透過感知動詞中繼。\n\n"
@@ -167,6 +177,68 @@ def fix_sensory_crutches(client: OpenAI, chapter_text: str, preserve_ending: boo
     return result if result else chapter_text
 
 
+def _para_key(text: str) -> str:
+    """Normalize paragraph opening for comparison: strip punctuation/spaces, keep content chars."""
+    import re
+    cleaned = re.sub(r'[\s，。！？、；：「」『』【】…——\-\(\)（）\[\]〔〕""'']', '', text)
+    return cleaned[:38]
+
+
+def extract_paragraph_starters(chapter_text: str, min_len: int = 12) -> list[str]:
+    """Extract the opening ~55 chars of each substantive paragraph for use as banned starters."""
+    starters = []
+    for para in chapter_text.split('\n\n'):
+        para = para.strip()
+        if not para or len(para) < min_len:
+            continue
+        first_line = para.split('\n')[0].strip()
+        if first_line.startswith('第') and '章' in first_line[:8]:
+            continue
+        starter = para[:55].strip()
+        if len(starter) >= min_len:
+            starters.append(starter)
+    return starters
+
+
+def fix_cross_chapter_repetition(client: OpenAI, new_chapter: str, prev_chapters: list[str]) -> str:
+    """Detect paragraphs in new_chapter that duplicate any paragraph from all previous chapters and rewrite them."""
+    new_paras = [p.strip() for p in new_chapter.split('\n\n') if p.strip() and len(p.strip()) > 30]
+    prev_para_keys: set[str] = set()
+    for ch in prev_chapters:
+        for p in ch.split('\n\n'):
+            p = p.strip()
+            if p and len(p) > 30:
+                prev_para_keys.add(_para_key(p))
+
+    dup_keys: list[str] = []
+    for para in new_paras:
+        if _para_key(para) in prev_para_keys:
+            dup_keys.append(para[:100])
+
+    if not dup_keys:
+        return new_chapter
+
+    dup_list = "\n".join(f"- {d}…" for d in dup_keys[:15])
+    resp = client.chat.completions.create(
+        model=_model_for(client),
+        messages=[{"role": "user", "content":
+            "以下新章節中，有些段落與前面章節幾乎完全一致（開頭相同），必須改寫。\n\n"
+            f"【重複段落開頭清單（以下每一條開頭的段落都必須改寫）】\n{dup_list}\n\n"
+            "改寫規則：\n"
+            "- 只改寫與前章重複的段落，其餘段落完全保留、逐字不動\n"
+            "- 改寫必須用全新角度、不同細節、不同句型，不可只換幾個詞\n"
+            "- 改寫後必須與上下文連貫，內容推進方向不變\n"
+            "- 直接輸出完整章節正文，不加任何說明或標記\n"
+            "- 必須輸出完整全文，不可截斷\n\n"
+            f"{new_chapter}"
+        }],
+        max_tokens=8000,
+        temperature=0.6,
+    )
+    result = resp.choices[0].message.content.strip()
+    return result if result else new_chapter
+
+
 def fix_consistency(client: OpenAI, chapter_text: str, protagonist_name: str = "", extra_names: list[str] | None = None, nickname: str = "", preserve_ending: bool = False) -> str:
     """Scan chapter for internal contradictions (location, numbers, facts) and fix them."""
     name_rules = []
@@ -183,7 +255,7 @@ def fix_consistency(client: OpenAI, chapter_text: str, protagonist_name: str = "
         if preserve_ending else ""
     )
     resp = client.chat.completions.create(
-        model=DEFAULT_MODEL,
+        model=_model_for(client),
         messages=[{"role": "user", "content":
             "請仔細閱讀以下章節，找出並修正所有內部矛盾，包括：\n"
             "- 同一角色在同一段時間出現在兩個不同地點\n"
@@ -504,6 +576,51 @@ def _cp_str(cp_type: str, cp_characters: list[dict], name: str, nsfw: bool = Fal
     return "CP 設定：無 CP，純故事向"
 
 
+def _cp_chapter_guard(cp_characters: list[dict], chapter_num: int, cp_type: str) -> str:
+    """Generate per-chapter hard prohibition based on each CP character's feeling_start setting and notes."""
+    if cp_type != "我 × 角色":
+        return ""
+    guards = []
+    for c in (cp_characters or []):
+        name = c.get("name", "").strip()
+        if not name or name == "隨機":
+            continue
+        start = c.get("feeling_start", 0)
+        if start > 0 and chapter_num < start:
+            guards.append(
+                f"- {name}（感情起始章：第 {start} 章）：\n"
+                f"  目前是第 {chapter_num} 章，距離她的感情起始章還有 {start - chapter_num} 章。\n"
+                f"  本章她對主角的狀態必須是：普通相處對象，沒有任何特別感受。\n"
+                f"  本章嚴禁出現：告白、說出喜歡/愛、心跳加速、深情凝視、主動靠近、曖昧言行、任何暗示她對主角有浪漫感情的描寫。\n"
+                f"  違反以上任何一條，即視為失敗，必須重寫。"
+            )
+        notes = c.get("notes", "").strip()
+        if notes:
+            guards.append(
+                f"━━ {name} 感情發展備注（硬性規則，逐章執行）━━\n"
+                f"以下備注定義了 {name} 在整個故事中按章節推進的感情狀態，必須嚴格遵守：\n\n"
+                f"{notes}\n\n"
+                f"【第 {chapter_num} 章執行指令】\n"
+                f"請根據以上備注，判斷第 {chapter_num} 章時 {name} 的感情狀態，並嚴格按備注執行。\n"
+                f"若備注指明此章節 {name} 對主角沒有特別感受、排斥或尚未有任何情感波動，\n"
+                f"本章絕對禁止出現以下任何一項：\n"
+                f"  - 告白、說出喜歡/愛\n"
+                f"  - 心跳加速、臉紅、眼神留戀等心動反應\n"
+                f"  - 主動靠近、主動展現溫柔\n"
+                f"  - 任何超越備注所描述情感程度的浪漫行為\n"
+                f"違反任何一條即視為失敗，必須重寫。"
+            )
+    if not guards:
+        return ""
+    return (
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "【⚠️ 本章 CP 感情狀態鎖定 — 最高優先級，凌駕所有設定與節奏規則，違反即失敗】\n"
+        "以下角色的感情狀態在本章被硬性鎖定，不論故事氛圍或劇情走向如何，都不得違背：\n\n"
+        + "\n\n".join(guards) + "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+
+
 def _extra_chars_str(chars: list[dict]) -> str:
     valid = [c for c in chars if c.get("name", "").strip()]
     if not valid:
@@ -571,7 +688,7 @@ def stream_rewrite_chapter(
         f"{style_block}"
     )
     stream = client.chat.completions.create(
-        model=DEFAULT_MODEL,
+        model=_model_for(client),
         messages=[
             {"role": "system", "content": system},
             {"role": "user",   "content": prompt},
@@ -683,6 +800,16 @@ def stream_chapter(
                 f"【⚠️ 已確立的故事事實 — 必須全部記住，絕對不可違背】\n"
                 f"以下每一條都是前面章節已明確建立的事實，包括角色位置、關係現況、能力狀態、重要物品。\n"
                 f"後續章節不得推翻、忽略、遺忘或與之矛盾，違反任何一條即視為失敗：\n{facts}"
+            )
+        if story_bible.get("paragraph_starters"):
+            # Inject most recent 70 starters — prevent verbatim paragraph reuse across chapters
+            recent_starters = story_bible["paragraph_starters"][-70:]
+            starters_str = "\n".join(f"- {s}…" for s in recent_starters)
+            parts.append(
+                f"【⚠️ 全故事已使用的段落開頭 — 最高禁令，逐條硬性執行】\n"
+                f"以下每一條都是前面章節真實出現過的段落開頭。\n"
+                f"本章任何段落的開頭，都不可與以下任何一條相同或高度相似（包括只換一兩個字的版本）。\n"
+                f"違反即視為重複，必須重寫：\n{starters_str}"
             )
         if parts:
             bible_block = "\n".join(parts)
@@ -834,7 +961,14 @@ def stream_chapter(
 
 （正文）"""
     else:
-        context = prev_chapter_text[-3000:] if len(prev_chapter_text) > 3000 else prev_chapter_text
+        if len(prev_chapter_text) > 3500:
+            context = (
+                prev_chapter_text[:900]
+                + "\n\n[……前章中段省略，以上為開頭，以下為結尾……]\n\n"
+                + prev_chapter_text[-2400:]
+            )
+        else:
+            context = prev_chapter_text
         ending_instruction = (
             "請將故事帶向完整結局，收束所有主線與情感線，給讀者滿足感。"
             if is_final else
@@ -882,8 +1016,10 @@ def stream_chapter(
         f"上列指示必須逐條在正文中具體體現，不可省略或用旁白帶過。\n\n"
         if chapter_directive.strip() else ""
     )
+    cp_guard = _cp_chapter_guard(cp_characters, chapter_num, cp_type)
     system_content = (
-        directive_sys_prefix
+        (cp_guard + "\n\n" if cp_guard else "")
+        + directive_sys_prefix
         + _SYSTEM
         + (_NSFW_ADDON if nsfw else "")
         + _STYLE_SYSTEM_ADDON
@@ -892,7 +1028,7 @@ def stream_chapter(
     )
 
     stream = client.chat.completions.create(
-        model=DEFAULT_MODEL,
+        model=_model_for(client),
         messages=[
             {"role": "system", "content": system_content},
             {"role": "user",   "content": prompt},
