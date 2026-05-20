@@ -890,7 +890,7 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
         _ov_through = st.session_state.get("early_overview_through", 0)
         with st.spinner("📚 壓縮早期章節記憶…"):
             st.session_state.early_overview = compress_old_summaries(
-                client, _existing_ov, _old, chapter_start=_ov_through + 1
+                active_client, _existing_ov, _old, chapter_start=_ov_through + 1
             )
         st.session_state.early_overview_through = _ov_through + len(_old)
         st.session_state.summaries = st.session_state.summaries[-_RECENT_KEEP:]
