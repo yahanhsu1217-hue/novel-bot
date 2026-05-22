@@ -746,6 +746,34 @@ def _validate(s: dict) -> list[str]:
         missing.append("至少一個配對角色名稱")
     return missing
 
+# ── Character removal detection ──────────────────────────────────────────────
+_cur_char_names: set[str] = set()
+for _ec in extra_characters:
+    if _ec.get("name", "").strip():
+        _cur_char_names.add(_ec["name"].strip())
+for _cp in cp_characters:
+    _cpn = _cp.get("name", "").strip()
+    if _cpn and _cpn != "隨機":
+        _cur_char_names.add(_cpn)
+
+_prev_char_names: set[str] = st.session_state.get("_known_char_names", set())
+_removed_chars = _prev_char_names - _cur_char_names
+
+if _removed_chars and st.session_state.get("chapters"):
+    _sb = st.session_state.story_bible
+    for _rn in _removed_chars:
+        _sb["established_facts"] = [f for f in _sb.get("established_facts", []) if isinstance(f, str) and _rn not in f]
+        _sb["open_threads"]      = [t for t in _sb.get("open_threads", [])      if isinstance(t, str) and _rn not in t]
+        _sb["banned_phrases"]    = [p for p in _sb.get("banned_phrases", [])    if isinstance(p, str) and _rn not in p]
+        _sb["used_tropes"]       = [t for t in _sb.get("used_tropes", [])       if isinstance(t, str) and _rn not in t]
+    _sb.setdefault("removed_characters", [])
+    for _rn in _removed_chars:
+        if _rn not in _sb["removed_characters"]:
+            _sb["removed_characters"].append(_rn)
+    _save_session()
+
+st.session_state["_known_char_names"] = _cur_char_names
+
 # ── Generate logic ────────────────────────────────────────────────────────────
 
 def _trim_to_original_end(original: str, processed: str, slack: int = 60) -> str:
@@ -934,12 +962,13 @@ if start_btn:
     st.session_state.early_overview = ""
     st.session_state.early_overview_through = 0
     st.session_state.saved_settings = s
-    # Clear per-chapter UI state from previous story
+    # Clear per-chapter UI state and character tracking from previous story
     _stale_prefixes = ("editing_", "rewrite_inst_", "rewrite_as_ending_",
                        "t_excerpt_", "t_issue_", "t_correction_", "t_type_",
                        "inline_sum_", "_sum_edit_", "_save_sum_")
     for _k in [k for k in st.session_state if any(k.startswith(p) for p in _stale_prefixes)]:
         del st.session_state[_k]
+    st.session_state["_known_char_names"] = set()
     # Overwrite session file with empty state so stale data never reloads
     try:
         with open(LAST_SESSION_FILE, "w", encoding="utf-8") as _f:
@@ -959,6 +988,7 @@ if start_btn:
     _style_ref = st.session_state.get("w_style_reference", "")
     chapter_text = generate_chapter(s, chapter_num=1, is_final=is_final, directive=_directive, style_reference=_style_ref, preserve_ending=_first_as_ending)
     st.session_state.chapters.append(chapter_text)
+    _save_session()
     st.rerun()
 
 # ── Main display ──────────────────────────────────────────────────────────────
@@ -1283,6 +1313,7 @@ else:
                                                 style_reference=st.session_state.get("w_style_reference", ""),
                                                 preserve_ending=_dir_as_ending)
                 st.session_state.chapters.append(chapter_text)
+                _save_session()
                 st.rerun()
 
             if ending_btn:
@@ -1301,6 +1332,7 @@ else:
                                                 style_reference=st.session_state.get("w_style_reference", ""),
                                                 preserve_ending=_dir_as_ending)
                 st.session_state.chapters.append(chapter_text)
+                _save_session()
                 st.session_state.story_started = False
                 st.rerun()
 
