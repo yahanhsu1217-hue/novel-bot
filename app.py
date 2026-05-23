@@ -11,7 +11,7 @@ import streamlit.components.v1 as components
 from openai import OpenAI
 
 from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, GEMINI_API_KEY, GEMINI_BASE_URL, LENGTH_CHARS
-from generator import stream_chapter, summarize_chapter, extract_story_bible, fix_consistency, fix_sensory_crutches, fix_repetitive_paragraphs, fix_cross_chapter_repetition, extract_paragraph_starters, analyze_writing_style, STYLE_PRESETS, compress_old_summaries
+from generator import stream_chapter, stream_outline, summarize_chapter, extract_story_bible, fix_consistency, fix_sensory_crutches, fix_repetitive_paragraphs, fix_cross_chapter_repetition, extract_paragraph_starters, analyze_writing_style, STYLE_PRESETS, compress_old_summaries
 from training import ISSUE_TYPES, add_note, delete_note, load_notes, notes_to_prompt_block
 
 LAST_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_settings.json")
@@ -139,6 +139,16 @@ for k, v in [
     ("early_overview",         ""),
     ("early_overview_through", 0),
     ("_dir_ver", 0),
+    # Outline flow state
+    ("outline_mode", False),
+    ("pending_outline", ""),
+    ("pending_chapter_num", 0),
+    ("pending_is_final", False),
+    ("pending_prev_text", ""),
+    ("pending_directive", ""),
+    ("pending_style_ref", ""),
+    ("pending_preserve_ending", False),
+    ("pending_settings", {}),
 ]:
     if k not in st.session_state:
         st.session_state[k] = v
@@ -816,7 +826,7 @@ def _flatten_strs(raw):
     return [x for x in (raw if isinstance(raw, list) else []) if isinstance(x, str)]
 
 
-def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_final: bool = False, directive: str = "", style_reference: str = "", preserve_ending: bool = False):
+def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_final: bool = False, directive: str = "", style_reference: str = "", preserve_ending: bool = False, outline: str = ""):
     full_text = ""
     placeholder = st.empty()
     active_client = _get_active_client()
@@ -833,6 +843,7 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
             style_reference=style_reference,
             early_overview=st.session_state.get("early_overview", ""),
             summary_offset=st.session_state.get("early_overview_through", 0),
+            outline=outline,
             **settings,
         )
         for chunk in stream_iter:
@@ -867,6 +878,7 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
                 style_reference=style_reference,
                 early_overview=st.session_state.get("early_overview", ""),
                 summary_offset=st.session_state.get("early_overview_through", 0),
+                outline=outline,
                 **settings,
             ):
                 full_text += chunk
@@ -986,9 +998,34 @@ if start_btn:
         _directive += _DIRECTIVE_AS_ENDING_RULE
     st.session_state._dir_ver += 1
     _style_ref = st.session_state.get("w_style_reference", "")
-    chapter_text = generate_chapter(s, chapter_num=1, is_final=is_final, directive=_directive, style_reference=_style_ref, preserve_ending=_first_as_ending)
-    st.session_state.chapters.append(chapter_text)
-    _save_session()
+    # Generate outline first
+    st.session_state.pending_chapter_num = 1
+    st.session_state.pending_is_final = is_final
+    st.session_state.pending_prev_text = ""
+    st.session_state.pending_directive = _directive
+    st.session_state.pending_style_ref = _style_ref
+    st.session_state.pending_preserve_ending = _first_as_ending
+    st.session_state.pending_settings = s
+    _outline_text = ""
+    _outline_ph = st.empty()
+    _outline_ph.info("📋 生成大綱中…")
+    try:
+        for _chunk in stream_outline(
+            client=_get_active_client(),
+            chapter_num=1,
+            prev_summaries=[],
+            story_bible=st.session_state.story_bible,
+            early_overview="",
+            summary_offset=0,
+            chapter_directive=_directive,
+            **s,
+        ):
+            _outline_text += _chunk
+            _outline_ph.markdown(f"**📋 第一章大綱**\n\n{_outline_text}")
+    except Exception as _oe:
+        _outline_ph.warning(f"大綱生成失敗（{_oe}），可手動填寫後再生成章節。")
+    st.session_state.pending_outline = _outline_text
+    st.session_state.outline_mode = True
     st.rerun()
 
 # ── Main display ──────────────────────────────────────────────────────────────
@@ -996,7 +1033,57 @@ if start_btn:
 st.markdown("## 📖 小說連載生成器")
 st.caption("作品同人 × 原創世界 × 連載章節，把自己寫進故事裡")
 
-if not st.session_state.chapters:
+# ── Outline editor (shown when outline_mode is active) ───────────────────────
+if st.session_state.get("outline_mode", False):
+    _pch = st.session_state.pending_chapter_num
+    st.markdown(f"### 📋 第 {_pch} 章大綱")
+    st.caption("大綱已生成，可直接修改後點擊「依大綱生成章節」。你的修改會直接決定 AI 的寫作方向。")
+    _outline_val = st.text_area(
+        "章節大綱",
+        value=st.session_state.get("pending_outline", ""),
+        key="outline_editor",
+        height=420,
+        label_visibility="collapsed",
+    )
+    _ol_col1, _ol_col2 = st.columns([3, 1])
+    with _ol_col1:
+        _gen_from_outline = st.button(
+            f"✨ 依大綱生成第 {_pch} 章", type="primary", use_container_width=True,
+        )
+    with _ol_col2:
+        _cancel_outline = st.button("✕ 取消", use_container_width=True)
+
+    if _gen_from_outline:
+        _ps = st.session_state.pending_settings
+        _new_text = generate_chapter(
+            _ps,
+            chapter_num=_pch,
+            prev_text=st.session_state.get("pending_prev_text", ""),
+            is_final=st.session_state.get("pending_is_final", False),
+            directive=st.session_state.get("pending_directive", ""),
+            style_reference=st.session_state.get("pending_style_ref", ""),
+            preserve_ending=st.session_state.get("pending_preserve_ending", False),
+            outline=_outline_val,
+        )
+        if _pch == 1:
+            st.session_state.chapters = [_new_text]
+        else:
+            st.session_state.chapters.append(_new_text)
+        st.session_state.outline_mode = False
+        st.session_state.pending_outline = ""
+        _save_session()
+        st.rerun()
+
+    if _cancel_outline:
+        st.session_state.outline_mode = False
+        st.session_state.pending_outline = ""
+        if not st.session_state.chapters:
+            st.session_state.story_started = False
+        st.rerun()
+
+    st.divider()
+
+if not st.session_state.chapters and not st.session_state.get("outline_mode", False):
     st.markdown("""
 <div style="text-align:center;padding:80px 20px;color:#475569">
   <div style="font-size:3.5rem">📖</div>
@@ -1307,13 +1394,34 @@ else:
                 if _next_next.strip():
                     st.session_state[f"next_dir_{st.session_state._dir_ver}"] = _next_next
                     st.session_state["w_next_next_dir"] = ""
-                chapter_text = generate_chapter(s, chapter_num=chapter_num,
-                                                prev_text=st.session_state.chapters[-1],
-                                                is_final=is_final, directive=_directive,
-                                                style_reference=st.session_state.get("w_style_reference", ""),
-                                                preserve_ending=_dir_as_ending)
-                st.session_state.chapters.append(chapter_text)
-                _save_session()
+                # Generate outline first
+                st.session_state.pending_chapter_num = chapter_num
+                st.session_state.pending_is_final = is_final
+                st.session_state.pending_prev_text = st.session_state.chapters[-1]
+                st.session_state.pending_directive = _directive
+                st.session_state.pending_style_ref = st.session_state.get("w_style_reference", "")
+                st.session_state.pending_preserve_ending = _dir_as_ending
+                st.session_state.pending_settings = s
+                _outline_text = ""
+                _outline_ph = st.empty()
+                _outline_ph.info("📋 生成大綱中…")
+                try:
+                    for _chunk in stream_outline(
+                        client=_get_active_client(),
+                        chapter_num=chapter_num,
+                        prev_summaries=st.session_state.summaries,
+                        story_bible=st.session_state.story_bible,
+                        early_overview=st.session_state.get("early_overview", ""),
+                        summary_offset=st.session_state.get("early_overview_through", 0),
+                        chapter_directive=_directive,
+                        **s,
+                    ):
+                        _outline_text += _chunk
+                        _outline_ph.markdown(f"**📋 第 {chapter_num} 章大綱**\n\n{_outline_text}")
+                except Exception as _oe:
+                    _outline_ph.warning(f"大綱生成失敗（{_oe}），可手動填寫後再生成章節。")
+                st.session_state.pending_outline = _outline_text
+                st.session_state.outline_mode = True
                 st.rerun()
 
             if ending_btn:

@@ -792,6 +792,151 @@ def stream_rewrite_chapter(
             yield delta
 
 
+def stream_outline(
+    client: OpenAI,
+    world_mode: str,
+    world_input: str,
+    language: str,
+    cp_type: str,
+    cp_characters: list[dict],
+    name: str,
+    gender: str,
+    personality: str,
+    appearance: str,
+    background: str,
+    extra_characters: list[dict],
+    chapter_num: int,
+    total_chapters: int = 5,
+    is_final: bool = False,
+    plot_want: str = "",
+    plot_forbid: str = "",
+    prev_summaries: list[str] | None = None,
+    story_bible: dict | None = None,
+    chapter_directive: str = "",
+    early_overview: str = "",
+    summary_offset: int = 0,
+    **kwargs,
+):
+    """Generate a structured chapter outline before full chapter generation."""
+    world_info = (
+        f"作品：《{world_input}》" if world_mode == "作品世界"
+        else f"世界背景：{world_input[:150]}"
+    )
+
+    history_lines = ""
+    if early_overview:
+        history_lines += f"【早期故事總覽】\n{early_overview}\n\n"
+    if prev_summaries:
+        recent = prev_summaries[-6:]
+        start_idx = len(prev_summaries) - len(recent)
+        history_lines += "\n".join(
+            f"第 {summary_offset + start_idx + i + 1} 章：{s}"
+            for i, s in enumerate(recent)
+        )
+
+    cp_info = ""
+    if cp_type == "我 × 角色" and cp_characters:
+        valid = [c for c in cp_characters if c.get("name", "").strip() and c["name"].strip() != "隨機"]
+        if valid:
+            cp_names = "、".join(c["name"] for c in valid)
+            cp_info = f"CP：{name} × {cp_names}"
+            for c in valid:
+                notes = c.get("notes", "").strip()
+                if notes:
+                    cp_info += f"\n{c['name']} 感情備注（必須嚴格遵守）：{notes}"
+
+    extra_info = ""
+    if extra_characters:
+        valid_ex = [c for c in extra_characters if c.get("name", "").strip()]
+        if valid_ex:
+            extra_info = "其他角色：" + "、".join(
+                c["name"] + (f"（{c.get('relationship', '')}）" if c.get("relationship") else "")
+                for c in valid_ex
+            )
+
+    threads_info = ""
+    if story_bible and story_bible.get("open_threads"):
+        threads_info = "待解決的伏筆（大綱需回應至少一條）：\n" + "\n".join(
+            f"- {t}" for t in story_bible["open_threads"]
+        )
+
+    progress_note = ""
+    if is_final:
+        progress_note = "⚠️ 這是最終章，大綱必須安排收束所有伏筆，給出完整結局。"
+    elif total_chapters > 1:
+        remaining = total_chapters - chapter_num
+        if remaining == 1:
+            progress_note = f"⚠️ 這是倒數第二章（共 {total_chapters} 章），大綱應開始收攏主線衝突。"
+        else:
+            progress_note = f"目前第 {chapter_num} 章，共規劃 {total_chapters} 章。"
+
+    directive_part = (
+        f"\n【本章特別指示 — 大綱必須納入以下元素】\n{chapter_directive}"
+        if chapter_directive.strip() else ""
+    )
+    plot_part = ""
+    if plot_want:
+        plot_part += f"\n希望出現的元素：{plot_want}"
+    if plot_forbid:
+        plot_part += f"\n禁止出現：{plot_forbid}"
+
+    prompt = f"""請為以下故事規劃第 {chapter_num} 章的大綱。
+
+{world_info}
+主角：{name}（{gender}）　個性：{personality}　背景：{background}
+{cp_info}
+{extra_info}
+
+{('【故事歷程】' + chr(10) + history_lines) if history_lines else ''}
+{threads_info}
+{progress_note}
+{plot_part}
+{directive_part}
+
+請輸出具體可執行的大綱，格式如下（每項都要具體，不可模糊）：
+
+**場景設定**
+（地點 / 時間 / 氛圍，1-2句）
+
+**本章情節（依序發生，每點30字以上）**
+1.
+2.
+3.
+4.
+5.
+
+**角色互動重點**
+（主角與哪些角色有什麼具體互動，包括對話方向或衝突）
+
+**感情線進展**
+（若有CP，描述本章感情關係的具體變化；需符合感情備注的限制）
+
+**本章結尾**
+（最後一幕的具體描述，這將成為下一章的開場）
+
+輸出語言：{language}
+直接輸出大綱，不要前言或說明。"""
+
+    stream = client.chat.completions.create(
+        model=_model_for(client),
+        messages=[
+            {"role": "system", "content": (
+                "你是一位連載小說的故事策劃，擅長規劃每章情節走向。"
+                "生成的大綱必須具體、可執行，每個情節點都要有明確的事件與結果，不可模糊帶過。"
+                "感情線進展必須嚴格遵守感情備注的設定，不可自行推進。"
+            )},
+            {"role": "user", "content": prompt},
+        ],
+        max_tokens=1500,
+        temperature=0.75,
+        stream=True,
+    )
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta
+
+
 def stream_chapter(
     client: OpenAI,
     world_mode: str,
@@ -828,6 +973,7 @@ def stream_chapter(
     pacing: str = "",
     early_overview: str = "",
     summary_offset: int = 0,
+    outline: str = "",
 ):
     target = LENGTH_CHARS.get(length_label, 2000)
 
@@ -1055,6 +1201,20 @@ def stream_chapter(
         f"敘事視角：第三人稱。旁白以主角名字「{name}」敘述。"
     )
 
+    outline_block = (
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"【⚠️ 本章大綱 — 最高強制指令，必須嚴格按此推進，不可偏離】\n"
+        f"以下大綱的每一個情節點都必須在正文中具體發生，不可省略、合併或用旁白帶過：\n\n"
+        f"{outline}\n\n"
+        f"【大綱執行規則】\n"
+        f"- 大綱描述的場景、事件、互動必須全部出現\n"
+        f"- 情節順序依大綱順序推進，不可跳過或調換\n"
+        f"- 感情線進展不可超出大綱描述的程度\n"
+        f"- 本章結尾必須與大綱的「本章結尾」一致\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        if outline.strip() else ""
+    )
+
     directive_block = (
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"【⚠️ 本章強制執行指示 — 凌駕所有規則，寫作前逐條確認，每條必須在正文中明確體現】\n"
@@ -1083,7 +1243,7 @@ def stream_chapter(
     )
 
     if chapter_num == 1:
-        prompt = f"""{directive_block + chr(10) + chr(10) if directive_block else ""}故事設定：
+        prompt = f"""{outline_block + chr(10) + chr(10) if outline_block else ""}{directive_block + chr(10) + chr(10) if directive_block else ""}故事設定：
 {setting_block}
 
 輸出語言：{language}
@@ -1096,6 +1256,7 @@ def stream_chapter(
 請創作第一章，建立世界氛圍與角色，帶出故事開端{"，給出完整結局。" if is_final else "，結尾留下讓人想繼續讀的鉤子。"}
 {length_block}
 {style_block}
+{outline_block}
 {directive_block}{_nsfw_reminder}
 直接輸出故事正文，格式如下：
 
@@ -1122,7 +1283,7 @@ def stream_chapter(
             f"【以上記憶讀完，方可繼續閱讀下方設定與規則】\n"
         ) if memory_block else ""
         prompt = f"""{memory_header}
-{directive_block + chr(10) if directive_block else ""}故事設定：
+{outline_block + chr(10) if outline_block else ""}{directive_block + chr(10) if directive_block else ""}故事設定：
 {setting_block}
 
 輸出語言：{language}
@@ -1132,6 +1293,7 @@ def stream_chapter(
 {ending_instruction}
 {length_block}
 {style_block}
+{outline_block}
 {directive_block}
 【⚠️ 上一章結尾 — 強制執行以下兩條，違反即失敗】
 1. 本章開場必須直接承接以下最後一幕的時間點與地點，不可跳過或無視
