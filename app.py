@@ -1059,6 +1059,7 @@ with _tab_outlines:
                 for _j, _ol in enumerate(st.session_state.outlines)
             )
             try:
+                _bulk_gen_hint = st.session_state.get(f"ol_gen_{_ch_num_ol - 1}", "")
                 for _chunk in stream_outline(
                     client=_get_active_client(),
                     chapter_num=_ch_num_ol,
@@ -1068,6 +1069,7 @@ with _tab_outlines:
                     summary_offset=st.session_state.get("early_overview_through", 0),
                     prev_outlines=_prev_ols_str,
                     is_final=(_ch_num_ol >= _s_ol["total_chapters"]),
+                    chapter_directive=_bulk_gen_hint,
                     **_s_ol,
                 ):
                     _ol_text += _chunk
@@ -1104,14 +1106,25 @@ with _tab_outlines:
                     height=200,
                     label_visibility="collapsed",
                 )
-                st.caption("修正建議（給 AI 的修正指示，重新生成時強制套用）")
-                _ol_note = st.text_area(
-                    "修正建議",
-                    key=f"ol_note_{_oi}",
-                    placeholder="例：Leo不是員工，他跟所有人都不認識\n例：主角不會開車\n例：這章不要出現室內場景\n例：把第3點改成兩人在外面相遇，不是在家",
-                    height=80,
-                    label_visibility="collapsed",
-                )
+                _hint_c1, _hint_c2 = st.columns(2)
+                with _hint_c1:
+                    st.caption("✏️ 生成建議（希望這章包含的方向或元素）")
+                    _ol_gen = st.text_area(
+                        "生成建議",
+                        key=f"ol_gen_{_oi}",
+                        placeholder="例：這章要有兩人在雨中相遇\n例：結尾安排誤會事件\n例：出現第三個角色破壞氣氛",
+                        height=90,
+                        label_visibility="collapsed",
+                    )
+                with _hint_c2:
+                    st.caption("🔧 修正建議（大綱中的設定錯誤，重生成時強制修正）")
+                    _ol_note = st.text_area(
+                        "修正建議",
+                        key=f"ol_note_{_oi}",
+                        placeholder="例：Leo不是員工，他跟所有人都不認識\n例：主角不會開車\n例：這章不要出現室內場景",
+                        height=90,
+                        label_visibility="collapsed",
+                    )
                 _rg_ph = st.empty()
                 _ol_sv, _ol_rg, _ol_dl = st.columns(3)
                 with _ol_sv:
@@ -1138,6 +1151,7 @@ with _tab_outlines:
                                 summary_offset=st.session_state.get("early_overview_through", 0),
                                 prev_outlines=_prev_ols_rg,
                                 is_final=(_oi + 1 >= _s_rg["total_chapters"]),
+                                chapter_directive=_ol_gen,
                                 outline_note=_ol_note,
                                 **_s_rg,
                             ):
