@@ -817,6 +817,7 @@ def stream_outline(
     early_overview: str = "",
     summary_offset: int = 0,
     prev_outlines: str = "",
+    outline_note: str = "",
     **kwargs,
 ):
     """Generate a structured chapter outline before full chapter generation."""
@@ -891,6 +892,13 @@ def stream_outline(
         f"\n【本章特別指示 — 大綱必須納入以下元素】\n{chapter_directive}"
         if chapter_directive.strip() else ""
     )
+    correction_part = (
+        f"\n\n⚠️⚠️【大綱修正指示 — 最高優先，絕對強制執行】\n"
+        f"以下是使用者針對本章大綱提出的修正要求。這些修正代表前版大綱有設定錯誤或需要調整。\n"
+        f"生成新大綱時，必須以下列修正為最優先依據，確保大綱完全符合這些要求：\n"
+        f"{outline_note}"
+        if outline_note.strip() else ""
+    )
     plot_part = ""
     if plot_want:
         plot_part += f"\n希望出現的元素：{plot_want}"
@@ -910,6 +918,7 @@ def stream_outline(
 {progress_note}
 {plot_part}
 {directive_part}
+{correction_part}
 
 請輸出具體可執行的大綱，格式如下（每項都要具體，不可模糊）：
 

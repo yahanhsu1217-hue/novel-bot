@@ -1098,6 +1098,14 @@ with _tab_outlines:
                     height=200,
                     label_visibility="collapsed",
                 )
+                st.caption("修正建議（給 AI 的修正指示，重新生成時強制套用）")
+                _ol_note = st.text_area(
+                    "修正建議",
+                    key=f"ol_note_{_oi}",
+                    placeholder="例：Leo不是員工，他跟所有人都不認識\n例：主角不會開車\n例：這章不要出現室內場景\n例：把第3點改成兩人在外面相遇，不是在家",
+                    height=80,
+                    label_visibility="collapsed",
+                )
                 _ol_sv, _ol_rg, _ol_dl = st.columns(3)
                 with _ol_sv:
                     if st.button("💾 儲存", key=f"ol_save_{_oi}", use_container_width=True):
@@ -1124,6 +1132,7 @@ with _tab_outlines:
                                 summary_offset=st.session_state.get("early_overview_through", 0),
                                 prev_outlines=_prev_ols_rg,
                                 is_final=(_oi + 1 >= _s_rg["total_chapters"]),
+                                outline_note=_ol_note,
                                 **_s_rg,
                             ):
                                 _new_ol += _chunk
