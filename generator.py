@@ -815,6 +815,7 @@ def stream_outline(
     chapter_directive: str = "",
     early_overview: str = "",
     summary_offset: int = 0,
+    prev_outlines: str = "",
     **kwargs,
 ):
     """Generate a structured chapter outline before full chapter generation."""
@@ -870,6 +871,11 @@ def stream_outline(
         else:
             progress_note = f"目前第 {chapter_num} 章，共規劃 {total_chapters} 章。"
 
+    prev_outlines_block = (
+        f"\n【已規劃的前章大綱（供情節連貫參考）】\n{prev_outlines}"
+        if prev_outlines else ""
+    )
+
     directive_part = (
         f"\n【本章特別指示 — 大綱必須納入以下元素】\n{chapter_directive}"
         if chapter_directive.strip() else ""
@@ -889,6 +895,7 @@ def stream_outline(
 
 {('【故事歷程】' + chr(10) + history_lines) if history_lines else ''}
 {threads_info}
+{prev_outlines_block}
 {progress_note}
 {plot_part}
 {directive_part}
