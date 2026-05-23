@@ -1092,12 +1092,15 @@ with _tab_outlines:
             _badge = " ✅" if _ch_done else ""
             _just_regen = st.session_state.pop(f"ol_regen_done_{_oi}", False)
             if _just_regen:
-                st.session_state.pop(f"ol_edit_{_oi}", None)
+                _ver = st.session_state.get(f"ol_ver_{_oi}", 0) + 1
+                st.session_state[f"ol_ver_{_oi}"] = _ver
+            else:
+                _ver = st.session_state.get(f"ol_ver_{_oi}", 0)
             with st.expander(f"第 {_oi + 1} 章大綱{_badge}", expanded=_just_regen or not _ch_done):
                 _ol_edited = st.text_area(
                     "大綱",
                     value=_oval,
-                    key=f"ol_edit_{_oi}",
+                    key=f"ol_edit_{_oi}_v{_ver}",
                     height=200,
                     label_visibility="collapsed",
                 )
@@ -1112,7 +1115,7 @@ with _tab_outlines:
                 _rg_ph = st.empty()
                 _ol_sv, _ol_rg, _ol_dl = st.columns(3)
                 with _ol_sv:
-                    if st.button("💾 儲存", key=f"ol_save_{_oi}", use_container_width=True):
+                    if st.button("💾 儲存", key=f"ol_save_{_oi}_v{_ver}", use_container_width=True):
                         st.session_state.outlines[_oi] = _ol_edited
                         _save_session()
                         st.success("已儲存")
@@ -1140,10 +1143,15 @@ with _tab_outlines:
                             ):
                                 _new_ol += _chunk
                                 _rg_ph.markdown(f"**重生成第 {_oi + 1} 章大綱**\n\n{_new_ol}")
-                            st.session_state.outlines[_oi] = _new_ol
-                            st.session_state[f"ol_regen_done_{_oi}"] = True
-                            _save_session()
-                            st.rerun()
+                            if _new_ol:
+                                _outlines = list(st.session_state.outlines)
+                                _outlines[_oi] = _new_ol
+                                st.session_state.outlines = _outlines
+                                st.session_state[f"ol_regen_done_{_oi}"] = True
+                                _save_session()
+                                st.rerun()
+                            else:
+                                st.warning("生成結果為空，請再試一次。")
                         except Exception as _oe:
                             st.error(f"生成失敗：{_oe}")
                 with _ol_dl:
