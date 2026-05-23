@@ -1090,7 +1090,8 @@ with _tab_outlines:
         for _oi, _oval in enumerate(st.session_state.outlines):
             _ch_done = _oi < len(st.session_state.chapters)
             _badge = " ✅" if _ch_done else ""
-            with st.expander(f"第 {_oi + 1} 章大綱{_badge}", expanded=not _ch_done):
+            _just_regen = st.session_state.pop(f"ol_regen_done_{_oi}", False)
+            with st.expander(f"第 {_oi + 1} 章大綱{_badge}", expanded=_just_regen or not _ch_done):
                 _ol_edited = st.text_area(
                     "大綱",
                     value=_oval,
@@ -1106,6 +1107,7 @@ with _tab_outlines:
                     height=80,
                     label_visibility="collapsed",
                 )
+                _rg_ph = st.empty()
                 _ol_sv, _ol_rg, _ol_dl = st.columns(3)
                 with _ol_sv:
                     if st.button("💾 儲存", key=f"ol_save_{_oi}", use_container_width=True):
@@ -1121,7 +1123,6 @@ with _tab_outlines:
                             for _j, _ol in enumerate(st.session_state.outlines) if _j != _oi
                         )
                         _new_ol = ""
-                        _rg_ph = st.empty()
                         try:
                             for _chunk in stream_outline(
                                 client=_get_active_client(),
@@ -1138,6 +1139,7 @@ with _tab_outlines:
                                 _new_ol += _chunk
                                 _rg_ph.markdown(f"**重生成第 {_oi + 1} 章大綱**\n\n{_new_ol}")
                             st.session_state.outlines[_oi] = _new_ol
+                            st.session_state[f"ol_regen_done_{_oi}"] = True
                             _save_session()
                             st.rerun()
                         except Exception as _oe:
