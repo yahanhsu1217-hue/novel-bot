@@ -1112,6 +1112,7 @@ with _tab_outlines:
                 with _ol_sv:
                     if st.button("💾 儲存", key=f"ol_save_{_oi}", use_container_width=True):
                         st.session_state.outlines[_oi] = _ol_edited
+                        st.session_state[f"ol_edit_{_oi}"] = _ol_edited
                         _save_session()
                         st.success("已儲存")
                 with _ol_rg:
@@ -1139,6 +1140,7 @@ with _tab_outlines:
                                 _new_ol += _chunk
                                 _rg_ph.markdown(f"**重生成第 {_oi + 1} 章大綱**\n\n{_new_ol}")
                             st.session_state.outlines[_oi] = _new_ol
+                            st.session_state[f"ol_edit_{_oi}"] = _new_ol
                             st.session_state[f"ol_regen_done_{_oi}"] = True
                             _save_session()
                             st.rerun()
