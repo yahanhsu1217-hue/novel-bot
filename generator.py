@@ -818,6 +818,7 @@ def stream_outline(
     summary_offset: int = 0,
     prev_outlines: str = "",
     outline_note: str = "",
+    batch_hint: str = "",
     **kwargs,
 ):
     """Generate a structured chapter outline before full chapter generation."""
@@ -873,20 +874,43 @@ def stream_outline(
         else:
             progress_note = f"目前第 {chapter_num} 章，共規劃 {total_chapters} 章。"
 
+    # Extract the last outline's ending for continuity anchor
+    last_outline_ending = ""
     if prev_outlines:
+        _ol_blocks = _re.split(r'【第\s*\d+\s*章大綱】', prev_outlines)
+        _ol_blocks = [b.strip() for b in _ol_blocks if b.strip()]
+        if _ol_blocks:
+            _last_ol = _ol_blocks[-1]
+            _ending_m = _re.search(r'\*\*本章結尾\*\*\s*\n(.*?)(?=\n\*\*|\Z)', _last_ol, _re.DOTALL)
+            if _ending_m:
+                last_outline_ending = _ending_m.group(1).strip()[:400]
+
+    if prev_outlines:
+        _continuity_block = ""
+        if last_outline_ending:
+            _continuity_block = (
+                f"\n⚡【前章結尾 — 本章開場必須從此承接，最高優先】\n"
+                f"{last_outline_ending}\n"
+                f"本章「場景設定」與第一個情節點，必須直接從上方的前章結尾推進。\n"
+                f"角色的位置、情緒、未解決的衝突，必須從那個狀態自然延續，不可跳過或重置。\n\n"
+            )
         prev_outlines_block = (
-            f"\n【已規劃的前章大綱 — 必讀，用於避免重複】\n{prev_outlines}\n\n"
-            f"⚠️【前章大綱差異化強制規定】\n"
-            f"仔細閱讀所有前章大綱，找出已重複使用的：場景地點、開場動作、情節結構、互動模式。\n"
-            f"本章大綱必須在以下所有面向上與每一章前章明顯不同：\n"
-            f"① 開場設定（地點、時間、兩人如何進入場景）\n"
-            f"② 情節起點（第一個事件/互動必須是前章從未用過的）\n"
-            f"③ 情節結構骨架（整體事件序列不可與任何前章高度相似）\n"
-            f"④ 角色互動的形式與觸發方式\n"
-            f"如果有任何情節點與前章大綱高度相似（超過50%的情節骨架重疊），必須重新構思，直到本章完全獨立且新穎。"
+            f"\n【已規劃的前章大綱 — 必讀】\n{prev_outlines}\n\n"
+            f"{_continuity_block}"
+            f"⚠️【差異化規定 — 在承接前章結尾的前提下執行】\n"
+            f"在保持連貫的基礎上，本章的情節走向、衝突類型、高潮事件必須與所有前章明顯不同：\n"
+            f"① 情節結構骨架（整體事件序列不可與任何前章高度相似）\n"
+            f"② 角色互動的觸發方式與衝突類型\n"
+            f"③ 情緒基調（不可每章都是同一種情緒走向）\n"
+            f"如有前章已用過的情節骨架，本章必須用不同結構推進。"
         )
     else:
         prev_outlines_block = ""
+
+    batch_hint_block = (
+        f"\n【整批故事走向建議 — 本章及接下來各章節都應朝此方向推進】\n{batch_hint}"
+        if batch_hint.strip() else ""
+    )
 
     directive_part = (
         f"\n【本章特別指示 — 大綱必須納入以下元素】\n{chapter_directive}"
@@ -914,6 +938,7 @@ def stream_outline(
 
 {('【故事歷程】' + chr(10) + history_lines) if history_lines else ''}
 {threads_info}
+{batch_hint_block}
 {prev_outlines_block}
 {progress_note}
 {plot_part}
@@ -948,17 +973,18 @@ def stream_outline(
         model=_model_for(client),
         messages=[
             {"role": "system", "content": (
-                "你是一位連載小說的故事策劃，擅長規劃每章情節走向。\n"
+                "你是一位連載小說的故事策劃，擅長規劃環環相扣的章節走向。\n"
                 "生成的大綱必須具體、可執行，每個情節點都要有明確的事件與結果，不可模糊帶過。\n"
                 "感情線進展必須嚴格遵守感情備注的設定，不可自行推進。\n"
-                "【最高優先規定】每章大綱的場景設定、開場動作、情節結構必須與所有前章大綱明顯不同。"
-                "絕對禁止：用相同的開場方式（如某人跨坐對方大腿）、相同的第一個情節（如解胸罩/吸奶）、"
-                "相同的情節骨架（A→B→C序列與前章高度一致）。"
-                "如果前章已出現某種互動模式，本章必須以完全不同的場景或觸發事件開場。"
+                "【最高優先規定一：章節連貫性】若有前章大綱，本章開場必須直接承接前章結尾的狀態。\n"
+                "角色的位置、情緒、關係、未解決的衝突，必須從前章結尾自然延續，不可跳過或重置。\n"
+                "禁止：前章結尾在A地點，本章突然出現在毫不相關的B地點而不交代過渡。\n"
+                "【最高優先規定二：差異化】在連貫的前提下，情節結構骨架與衝突類型必須與所有前章明顯不同。\n"
+                "絕對禁止：相同的情節骨架（A→B→C序列與前章高度一致）、每章都是同一種情緒走向。"
             )},
             {"role": "user", "content": prompt},
         ],
-        max_tokens=1500,
+        max_tokens=2500,
         temperature=0.75,
         stream=True,
     )

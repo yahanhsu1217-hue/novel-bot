@@ -670,17 +670,14 @@ with st.sidebar:
     st.divider()
 
     # ── Action buttons ────────────────────────────────────────────────────────
-    st.markdown("### 📌 第一章特別指示")
+    st.markdown("### 📌 第一章大綱建議")
+    st.caption("重置故事後，可在此填寫第一章的方向，生成大綱時自動帶入")
     st.text_area(
-        "本章特別指示", key=f"w_first_dir_{st.session_state._dir_ver}",
+        "第一章大綱建議", key=f"w_first_dir_{st.session_state._dir_ver}",
         placeholder="例：開場在大雨夜、主角剛收到一封匿名信…（留空則由 AI 自由發揮）",
         height=80, label_visibility="collapsed",
     )
-    st.checkbox(
-        "以此指示作為本章結尾（AI 寫到指示事件後立即收章）",
-        key=f"first_dir_as_ending_{st.session_state._dir_ver}",
-    )
-    start_btn = st.button("✨ 開始新故事", type="primary", use_container_width=True)
+    start_btn = st.button("✨ 開始新故事大綱", type="primary", use_container_width=True)
 
 # Auto-save sidebar settings on every run so refreshing restores current state
 try:
@@ -961,42 +958,37 @@ if start_btn:
             _f.write(_current_settings_json())
     except Exception:
         pass
+    _first_ch_hint = st.session_state.get(f"w_first_dir_{st.session_state._dir_ver}", "")
     st.session_state.chapters = []
     st.session_state.summaries = []
+    st.session_state.outlines = []
     st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": [], "asked_questions": []}
     st.session_state.early_overview = ""
     st.session_state.early_overview_through = 0
     st.session_state.saved_settings = s
+    st.session_state.story_started = False
+    # Pre-fill first chapter outline hint from sidebar input
+    if _first_ch_hint.strip():
+        st.session_state["ol_gen_0"] = _first_ch_hint
     # Clear per-chapter UI state and character tracking from previous story
     _stale_prefixes = ("editing_", "rewrite_inst_", "rewrite_as_ending_",
                        "t_excerpt_", "t_issue_", "t_correction_", "t_type_",
-                       "inline_sum_", "_sum_edit_", "_save_sum_")
+                       "inline_sum_", "_sum_edit_", "_save_sum_", "ol_edit_",
+                       "ol_ver_", "ol_regen_done_", "ol_regen_ch_")
     for _k in [k for k in st.session_state if any(k.startswith(p) for p in _stale_prefixes)]:
         del st.session_state[_k]
     st.session_state["_known_char_names"] = set()
-    # Overwrite session file with empty state so stale data never reloads
+    st.session_state._dir_ver += 1
     try:
         with open(LAST_SESSION_FILE, "w", encoding="utf-8") as _f:
             import json as _json2
-            _json2.dump({"chapters": [], "summaries": [], "story_bible": st.session_state.story_bible,
+            _json2.dump({"chapters": [], "summaries": [], "outlines": [],
+                         "story_bible": st.session_state.story_bible,
                          "saved_settings": {}, "early_overview": "", "early_overview_through": 0}, _f,
                         ensure_ascii=False)
     except Exception:
         pass
-    st.session_state.story_started = True
-    is_final = s["total_chapters"] == 1
-    _directive = st.session_state.get(f"w_first_dir_{st.session_state._dir_ver}", "")
-    _first_as_ending = st.session_state.get(f"first_dir_as_ending_{st.session_state._dir_ver}", False)
-    if _first_as_ending and _directive.strip():
-        _directive += _DIRECTIVE_AS_ENDING_RULE
-    st.session_state._dir_ver += 1
-    _style_ref = st.session_state.get("w_style_reference", "")
-    _ch1_outline = st.session_state.outlines[0] if st.session_state.outlines else ""
-    chapter_text = generate_chapter(s, chapter_num=1, is_final=is_final, directive=_directive,
-                                    style_reference=_style_ref, preserve_ending=_first_as_ending,
-                                    outline=_ch1_outline)
-    st.session_state.chapters.append(chapter_text)
-    _save_session()
+    st.success("✅ 故事已重置！請到「📋 大綱規劃」分頁開始生成大綱。")
     st.rerun()
 
 # ── Main display ──────────────────────────────────────────────────────────────
@@ -1042,6 +1034,17 @@ with _tab_outlines:
             key="_outline_gen_btn",
             disabled=not _live_settings_ready,
         )
+    st.text_area(
+        "整批生成建議（選填）",
+        key="_ol_batch_hint",
+        placeholder=(
+            "例：這幾章圍繞一個核心誤會推進，感情線從疏遠到靠近\n"
+            "例：每章結尾都留下一個未解決的懸念，帶入下一章\n"
+            "例：主線是調查某件事，每章揭露一部分真相"
+        ),
+        height=80,
+        help="填寫後，這批大綱都會按此方向生成，並環環相扣",
+    )
     if not _live_settings_ready:
         st.caption("請先在左側填寫作品名稱與主角姓名，才能生成大綱。")
 
@@ -1070,6 +1073,7 @@ with _tab_outlines:
                     prev_outlines=_prev_ols_str,
                     is_final=(_ch_num_ol >= _s_ol["total_chapters"]),
                     chapter_directive=_bulk_gen_hint,
+                    batch_hint=st.session_state.get("_ol_batch_hint", ""),
                     **_s_ol,
                 ):
                     _ol_text += _chunk
@@ -1089,6 +1093,8 @@ with _tab_outlines:
 
     if st.session_state.get("outlines"):
         st.divider()
+        _pending_ol_delete = None
+        _pending_ol_insert = None
         for _oi, _oval in enumerate(st.session_state.outlines):
             _ch_done = _oi < len(st.session_state.chapters)
             _badge = " ✅" if _ch_done else ""
@@ -1126,7 +1132,7 @@ with _tab_outlines:
                         label_visibility="collapsed",
                     )
                 _rg_ph = st.empty()
-                _ol_sv, _ol_rg, _ol_dl = st.columns(3)
+                _ol_sv, _ol_rg, _ol_ins, _ol_dl = st.columns(4)
                 with _ol_sv:
                     if st.button("💾 儲存", key=f"ol_save_{_oi}_v{_ver}", use_container_width=True):
                         st.session_state.outlines[_oi] = _ol_edited
@@ -1168,11 +1174,95 @@ with _tab_outlines:
                                 st.warning("生成結果為空，請再試一次。")
                         except Exception as _oe:
                             st.error(f"生成失敗：{_oe}")
+                with _ol_ins:
+                    if st.button("➕ 插入", key=f"ol_insert_{_oi}", use_container_width=True,
+                                 help="在此章前插入一個空白大綱"):
+                        _pending_ol_insert = _oi
                 with _ol_dl:
                     if st.button("🗑 刪除", key=f"ol_del_{_oi}", use_container_width=True):
-                        st.session_state.outlines.pop(_oi)
+                        _pending_ol_delete = _oi
+                _can_gen_ch = (
+                    not _ch_done
+                    and _oi <= len(st.session_state.chapters)
+                    and _live_settings_ready
+                )
+                if _ch_done:
+                    st.caption("✅ 本章已生成，至「章節」分頁查看")
+                    if st.button(
+                        "🔄 依更新大綱重新生成",
+                        key=f"ol_regen_ch_{_oi}",
+                        use_container_width=True,
+                        disabled=not _live_settings_ready,
+                        help="修改大綱後點此依新大綱重新生成本章（會覆蓋現有章節）",
+                    ):
+                        _s_regen_ch = _collect_settings()
+                        missing_regen = _validate(_s_regen_ch)
+                        if missing_regen:
+                            st.warning(f"請填寫：{'、'.join(missing_regen)}")
+                        else:
+                            st.session_state.saved_settings = _s_regen_ch
+                            _ch_num_regen = _oi + 1
+                            _is_final_regen = _ch_num_regen >= _s_regen_ch["total_chapters"]
+                            _prev_text_regen = st.session_state.chapters[_oi - 1] if _oi > 0 else ""
+                            _outline_val_regen = st.session_state.get(f"ol_edit_{_oi}_v{_ver}", _oval)
+                            _ov_through_regen = st.session_state.get("early_overview_through", 0)
+                            if _ov_through_regen >= _oi + 1:
+                                st.session_state.early_overview = ""
+                                st.session_state.early_overview_through = 0
+                                st.session_state.summaries = []
+                            else:
+                                _keep_regen = _oi - _ov_through_regen
+                                st.session_state.summaries = st.session_state.summaries[:_keep_regen]
+                            chapter_text = generate_chapter(
+                                _s_regen_ch,
+                                chapter_num=_ch_num_regen,
+                                prev_text=_prev_text_regen,
+                                is_final=_is_final_regen,
+                                style_reference=st.session_state.get("w_style_reference", ""),
+                                outline=_outline_val_regen,
+                            )
+                            st.session_state.chapters[_oi] = chapter_text
+                            _save_session()
+                            st.rerun()
+                elif _oi > len(st.session_state.chapters):
+                    st.caption(f"⚠️ 請先生成第 {_oi} 章，才能生成本章")
+                if st.button(
+                    "✨ 依此大綱生成章節",
+                    key=f"ol_gen_ch_{_oi}",
+                    use_container_width=True,
+                    disabled=not _can_gen_ch,
+                    type="primary" if _can_gen_ch else "secondary",
+                ):
+                    _s_gch = _collect_settings()
+                    missing_gch = _validate(_s_gch)
+                    if missing_gch:
+                        st.warning(f"請填寫：{'、'.join(missing_gch)}")
+                    else:
+                        st.session_state.saved_settings = _s_gch
+                        _ch_num_gen = _oi + 1
+                        _is_final_gen = _ch_num_gen >= _s_gch["total_chapters"]
+                        _prev_text_gen = st.session_state.chapters[_oi - 1] if _oi > 0 else ""
+                        _outline_val = st.session_state.get(f"ol_edit_{_oi}_v{_ver}", _oval)
+                        st.session_state.story_started = True
+                        chapter_text = generate_chapter(
+                            _s_gch,
+                            chapter_num=_ch_num_gen,
+                            prev_text=_prev_text_gen,
+                            is_final=_is_final_gen,
+                            style_reference=st.session_state.get("w_style_reference", ""),
+                            outline=_outline_val,
+                        )
+                        st.session_state.chapters.append(chapter_text)
                         _save_session()
                         st.rerun()
+        if _pending_ol_insert is not None:
+            st.session_state.outlines.insert(_pending_ol_insert, "")
+            _save_session()
+            st.rerun()
+        elif _pending_ol_delete is not None:
+            st.session_state.outlines.pop(_pending_ol_delete)
+            _save_session()
+            st.rerun()
         st.divider()
         if st.button("🗑 清除所有大綱", key="_ol_clear_all"):
             st.session_state.outlines = []
