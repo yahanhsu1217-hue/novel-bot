@@ -1183,7 +1183,6 @@ with _tab_outlines:
                         _pending_ol_delete = _oi
                 _can_gen_ch = (
                     not _ch_done
-                    and _oi <= len(st.session_state.chapters)
                     and _live_settings_ready
                 )
                 if _ch_done:
@@ -1224,8 +1223,6 @@ with _tab_outlines:
                             st.session_state.chapters[_oi] = chapter_text
                             _save_session()
                             st.rerun()
-                elif _oi > len(st.session_state.chapters):
-                    st.caption(f"⚠️ 請先生成第 {_oi} 章，才能生成本章")
                 if st.button(
                     "✨ 依此大綱生成章節",
                     key=f"ol_gen_ch_{_oi}",
@@ -1241,7 +1238,12 @@ with _tab_outlines:
                         st.session_state.saved_settings = _s_gch
                         _ch_num_gen = _oi + 1
                         _is_final_gen = _ch_num_gen >= _s_gch["total_chapters"]
-                        _prev_text_gen = st.session_state.chapters[_oi - 1] if _oi > 0 else ""
+                        _prev_text_gen = (
+                            st.session_state.chapters[_oi - 1]
+                            if _oi > 0 and len(st.session_state.chapters) > _oi - 1
+                               and st.session_state.chapters[_oi - 1]
+                            else ""
+                        )
                         _outline_val = st.session_state.get(f"ol_edit_{_oi}_v{_ver}", _oval)
                         st.session_state.story_started = True
                         chapter_text = generate_chapter(
@@ -1252,7 +1254,13 @@ with _tab_outlines:
                             style_reference=st.session_state.get("w_style_reference", ""),
                             outline=_outline_val,
                         )
-                        st.session_state.chapters.append(chapter_text)
+                        # Pad with empty strings if generating out of order
+                        while len(st.session_state.chapters) < _oi:
+                            st.session_state.chapters.append("")
+                        if len(st.session_state.chapters) == _oi:
+                            st.session_state.chapters.append(chapter_text)
+                        else:
+                            st.session_state.chapters[_oi] = chapter_text
                         _save_session()
                         st.rerun()
         if _pending_ol_insert is not None:
@@ -1355,6 +1363,8 @@ with _tab_chapters:
 """, unsafe_allow_html=True)
     else:
         for i, text in enumerate(st.session_state.chapters):
+            if not text:
+                continue
             st.markdown(f'<div id="ch-{i}"></div>', unsafe_allow_html=True)
             st.markdown(f"## 第 {i + 1} 章")
             st.markdown(f'<div class="chapter-box">{text}</div>', unsafe_allow_html=True)
