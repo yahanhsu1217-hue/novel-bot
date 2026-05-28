@@ -892,7 +892,7 @@ with st.sidebar:
         _sample = st.session_state.get("w_style_sample", "").strip()
         if _sample:
             with st.spinner("分析文風中…"):
-                _analysis = analyze_writing_style(client, _sample)
+                _analysis = analyze_writing_style(_get_active_client(), _sample)
                 _excerpt = _sample[:600].strip()
                 st.session_state["w_style_reference"] = (
                     f"【參考原文節錄 — 直接照此句子長度、標點密度、動詞力度寫作】\n{_excerpt}\n\n"
