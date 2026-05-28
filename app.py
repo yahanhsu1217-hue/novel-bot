@@ -83,12 +83,23 @@ if "_settings_initialized" not in st.session_state:
             st.session_state[f"cpnotes_{_j}"] = _cp.get("notes", "")
         st.session_state["num_extra_chars"] = _last.get("num_extra_chars", 0)
         for _i, _c in enumerate(_last.get("extra_characters", [])):
-            st.session_state[f"cn_{_i}"]   = _c.get("name", "")
-            st.session_state[f"ca_{_i}"]   = _c.get("appearance", "")
-            st.session_state[f"cp_{_i}"]   = _c.get("personality", "")
-            st.session_state[f"cres_{_i}"] = _c.get("residence", "")
-            st.session_state[f"csk_{_i}"]  = _c.get("skills", "")
-            st.session_state[f"cr_{_i}"]   = _c.get("relationship", "")
+            st.session_state[f"cn_{_i}"]        = _c.get("name", "")
+            st.session_state[f"ca_{_i}"]        = _c.get("appearance", "")
+            st.session_state[f"ca_age_{_i}"]    = _c.get("age", "")
+            st.session_state[f"ca_height_{_i}"] = _c.get("height", "")
+            st.session_state[f"ca_body_{_i}"]   = _c.get("body_type", "")
+            st.session_state[f"ca_face_{_i}"]   = _c.get("face_shape", "")
+            st.session_state[f"ca_eyes_{_i}"]   = _c.get("eyes", "")
+            st.session_state[f"ca_nose_{_i}"]   = _c.get("nose", "")
+            st.session_state[f"ca_mouth_{_i}"]  = _c.get("mouth", "")
+            st.session_state[f"ca_hair_{_i}"]   = _c.get("hair", "")
+            st.session_state[f"ca_skin_{_i}"]   = _c.get("skin", "")
+            st.session_state[f"ca_cloth_{_i}"]  = _c.get("clothing", "")
+            st.session_state[f"ca_voice_{_i}"]  = _c.get("voice", "")
+            st.session_state[f"cp_{_i}"]        = _c.get("personality", "")
+            st.session_state[f"cres_{_i}"]      = _c.get("residence", "")
+            st.session_state[f"csk_{_i}"]       = _c.get("skills", "")
+            st.session_state[f"cr_{_i}"]        = _c.get("relationship", "")
     except Exception:
         pass
     # Restore chapters / story state
@@ -241,6 +252,17 @@ with st.sidebar:
             chars.append({
                 "name":         st.session_state.get(f"cn_{i}", ""),
                 "appearance":   st.session_state.get(f"ca_{i}", ""),
+                "age":          st.session_state.get(f"ca_age_{i}", ""),
+                "height":       st.session_state.get(f"ca_height_{i}", ""),
+                "body_type":    st.session_state.get(f"ca_body_{i}", ""),
+                "face_shape":   st.session_state.get(f"ca_face_{i}", ""),
+                "eyes":         st.session_state.get(f"ca_eyes_{i}", ""),
+                "nose":         st.session_state.get(f"ca_nose_{i}", ""),
+                "mouth":        st.session_state.get(f"ca_mouth_{i}", ""),
+                "hair":         st.session_state.get(f"ca_hair_{i}", ""),
+                "skin":         st.session_state.get(f"ca_skin_{i}", ""),
+                "clothing":     st.session_state.get(f"ca_cloth_{i}", ""),
+                "voice":        st.session_state.get(f"ca_voice_{i}", ""),
                 "personality":  st.session_state.get(f"cp_{i}", ""),
                 "residence":    st.session_state.get(f"cres_{i}", ""),
                 "skills":       st.session_state.get(f"csk_{i}", ""),
@@ -334,12 +356,23 @@ with st.sidebar:
             n = data.get("num_extra_chars", 0)
             st.session_state.num_extra_chars = n
             for i, c in enumerate(data.get("extra_characters", [])):
-                st.session_state[f"cn_{i}"]   = c.get("name", "")
-                st.session_state[f"ca_{i}"]   = c.get("appearance", "")
-                st.session_state[f"cp_{i}"]   = c.get("personality", "")
-                st.session_state[f"cres_{i}"] = c.get("residence", "")
-                st.session_state[f"csk_{i}"]  = c.get("skills", "")
-                st.session_state[f"cr_{i}"]   = c.get("relationship", "")
+                st.session_state[f"cn_{i}"]        = c.get("name", "")
+                st.session_state[f"ca_{i}"]        = c.get("appearance", "")
+                st.session_state[f"ca_age_{i}"]    = c.get("age", "")
+                st.session_state[f"ca_height_{i}"] = c.get("height", "")
+                st.session_state[f"ca_body_{i}"]   = c.get("body_type", "")
+                st.session_state[f"ca_face_{i}"]   = c.get("face_shape", "")
+                st.session_state[f"ca_eyes_{i}"]   = c.get("eyes", "")
+                st.session_state[f"ca_nose_{i}"]   = c.get("nose", "")
+                st.session_state[f"ca_mouth_{i}"]  = c.get("mouth", "")
+                st.session_state[f"ca_hair_{i}"]   = c.get("hair", "")
+                st.session_state[f"ca_skin_{i}"]   = c.get("skin", "")
+                st.session_state[f"ca_cloth_{i}"]  = c.get("clothing", "")
+                st.session_state[f"ca_voice_{i}"]  = c.get("voice", "")
+                st.session_state[f"cp_{i}"]        = c.get("personality", "")
+                st.session_state[f"cres_{i}"]      = c.get("residence", "")
+                st.session_state[f"csk_{i}"]       = c.get("skills", "")
+                st.session_state[f"cr_{i}"]        = c.get("relationship", "")
             st.session_state.last_loaded_file = uploaded.name
             st.rerun()
         except Exception as e:
@@ -665,12 +698,56 @@ with st.sidebar:
     extra_characters = []
     for i in range(st.session_state.num_extra_chars):
         with st.expander(f"角色 {i + 1}", expanded=True):
-            c_name         = st.text_input("名稱",       key=f"cn_{i}", placeholder="角色名字")
-            c_appearance   = st.text_input("外貌",       key=f"ca_{i}", placeholder="例：銀髮紅眼、高挑冷峻…")
-            c_personality  = st.text_input("個性",       key=f"cp_{i}", placeholder="例：冷靜、腹黑…")
+            c_name = st.text_input("名稱", key=f"cn_{i}", placeholder="角色名字")
+
+            st.markdown("**外貌設定**")
+            _ec_c1, _ec_c2 = st.columns(2)
+            with _ec_c1:
+                _ec_age    = st.text_input("年齡",   key=f"ca_age_{i}",    placeholder="例：25 歲")
+            with _ec_c2:
+                _ec_height = st.text_input("身高",   key=f"ca_height_{i}", placeholder="例：178 cm")
+            _ec_body   = st.text_area("體型",   key=f"ca_body_{i}",
+                placeholder="例：高挑結實，肩寬腰窄，線條有力量感…", height=60)
+            _ec_face   = st.text_input("臉型",  key=f"ca_face_{i}",
+                placeholder="例：稜角分明，輪廓立體，下頷線清晰…")
+            st.caption("── 五官 ──")
+            _ec_eyes   = st.text_area("眼睛",  key=f"ca_eyes_{i}",
+                placeholder="例：深邃雙眼皮，瞳色深棕，眼神銳利有壓迫感…", height=56)
+            _ec_nose   = st.text_input("鼻子", key=f"ca_nose_{i}",
+                placeholder="例：鼻樑高挺，山根高，輪廓清晰…")
+            _ec_mouth  = st.text_area("嘴巴",  key=f"ca_mouth_{i}",
+                placeholder="例：唇形俐落，唇色偏深，嘴角微微下壓帶冷意…", height=56)
+            st.caption("── 外表其他 ──")
+            _ec_hair   = st.text_area("髮型",  key=f"ca_hair_{i}",
+                placeholder="例：短黑髮，側分，髮質濃密略顯凌亂…", height=60)
+            _ec_skin   = st.text_area("膚色",  key=f"ca_skin_{i}",
+                placeholder="例：小麥色，健康的日曬膚色，頸側有一道淡疤…", height=56)
+            _ec_cloth  = st.text_area("穿著風格", key=f"ca_cloth_{i}",
+                placeholder="例：偏好簡約俐落，常穿黑白灰，不戴飾品…", height=60)
+            _ec_voice  = st.text_area("聲音與特徵", key=f"ca_voice_{i}",
+                placeholder="例：聲音低沉，說話直接，習慣沉默，思考時會輕扣桌面…", height=56)
+
+            # Combine sub-fields into appearance string
+            _ec_parts = []
+            if _ec_age.strip():    _ec_parts.append(f"年齡：{_ec_age.strip()}")
+            if _ec_height.strip(): _ec_parts.append(f"身高：{_ec_height.strip()}")
+            if _ec_body.strip():   _ec_parts.append(f"體型：{_ec_body.strip()}")
+            if _ec_face.strip():   _ec_parts.append(f"臉型：{_ec_face.strip()}")
+            if _ec_eyes.strip():   _ec_parts.append(f"眼睛：{_ec_eyes.strip()}")
+            if _ec_nose.strip():   _ec_parts.append(f"鼻子：{_ec_nose.strip()}")
+            if _ec_mouth.strip():  _ec_parts.append(f"嘴巴：{_ec_mouth.strip()}")
+            if _ec_hair.strip():   _ec_parts.append(f"髮型：{_ec_hair.strip()}")
+            if _ec_skin.strip():   _ec_parts.append(f"膚色：{_ec_skin.strip()}")
+            if _ec_cloth.strip():  _ec_parts.append(f"穿著：{_ec_cloth.strip()}")
+            if _ec_voice.strip():  _ec_parts.append(f"聲音與特徵：{_ec_voice.strip()}")
+            c_appearance = "；\n".join(_ec_parts)
+            if not c_appearance:
+                c_appearance = st.session_state.get(f"ca_{i}", "")
+
+            c_personality  = st.text_input("個性",       key=f"cp_{i}",   placeholder="例：冷靜、腹黑…")
             c_residence    = st.text_input("住的地方",   key=f"cres_{i}", placeholder="例：城堡東翼、學校宿舍…")
-            c_skills       = st.text_input("技能",       key=f"csk_{i}", placeholder="例：劍術、魔法、駭客…")
-            c_relationship = st.text_input("與我的關係", key=f"cr_{i}", placeholder="例：青梅竹馬、宿敵…")
+            c_skills       = st.text_input("技能",       key=f"csk_{i}",  placeholder="例：劍術、魔法、駭客…")
+            c_relationship = st.text_input("與我的關係", key=f"cr_{i}",   placeholder="例：青梅竹馬、宿敵…")
             extra_characters.append({
                 "name": c_name, "appearance": c_appearance,
                 "personality": c_personality, "residence": c_residence,
