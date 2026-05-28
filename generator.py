@@ -658,6 +658,14 @@ def _cp_str(cp_type: str, cp_characters: list[dict], name: str, nsfw: bool = Fal
                 lines.append(f"- AI 自選角色：請從世界中挑選合適角色，親密程度上限：{guide}")
             else:
                 lines.append(f"- {char_name}：親密程度上限：{guide}")
+            if c.get("appearance"):
+                lines.append(f"  外貌：{c['appearance']}")
+            if c.get("personality"):
+                lines.append(f"  個性：{c['personality']}")
+            if c.get("residence"):
+                lines.append(f"  住所：{c['residence']}")
+            if c.get("background"):
+                lines.append(f"  背景：{c['background']}")
             notes = c.get("notes", "").strip()
             if notes:
                 char_notes_lines.append(

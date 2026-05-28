@@ -78,9 +78,23 @@ if "_settings_initialized" not in st.session_state:
             _cp_chars = [{"name": _last["cp_character"], "intimacy": _last.get("intimacy", "糖（甜蜜互動）")}]
         st.session_state["num_cp_chars"] = len(_cp_chars)
         for _j, _cp in enumerate(_cp_chars):
-            st.session_state[f"cpname_{_j}"] = _cp.get("name", "")
-            st.session_state[f"cpinti_{_j}"] = _cp.get("intimacy", "糖（甜蜜互動）")
-            st.session_state[f"cpnotes_{_j}"] = _cp.get("notes", "")
+            st.session_state[f"cpname_{_j}"]      = _cp.get("name", "")
+            st.session_state[f"cpinti_{_j}"]      = _cp.get("intimacy", "糖（甜蜜互動）")
+            st.session_state[f"cpnotes_{_j}"]     = _cp.get("notes", "")
+            st.session_state[f"cpapp_age_{_j}"]   = _cp.get("age", "")
+            st.session_state[f"cpapp_height_{_j}"]= _cp.get("height", "")
+            st.session_state[f"cpapp_body_{_j}"]  = _cp.get("body_type", "")
+            st.session_state[f"cpapp_face_{_j}"]  = _cp.get("face_shape", "")
+            st.session_state[f"cpapp_eyes_{_j}"]  = _cp.get("eyes", "")
+            st.session_state[f"cpapp_nose_{_j}"]  = _cp.get("nose", "")
+            st.session_state[f"cpapp_mouth_{_j}"] = _cp.get("mouth", "")
+            st.session_state[f"cpapp_hair_{_j}"]  = _cp.get("hair", "")
+            st.session_state[f"cpapp_skin_{_j}"]  = _cp.get("skin", "")
+            st.session_state[f"cpapp_cloth_{_j}"] = _cp.get("clothing", "")
+            st.session_state[f"cpapp_voice_{_j}"] = _cp.get("voice", "")
+            st.session_state[f"cppersonality_{_j}"]= _cp.get("personality", "")
+            st.session_state[f"cpresidence_{_j}"] = _cp.get("residence", "")
+            st.session_state[f"cpbackground_{_j}"]= _cp.get("background", "")
         st.session_state["num_extra_chars"] = _last.get("num_extra_chars", 0)
         for _i, _c in enumerate(_last.get("extra_characters", [])):
             st.session_state[f"cn_{_i}"]        = _c.get("name", "")
@@ -271,9 +285,23 @@ with st.sidebar:
         cp_chars = []
         for i in range(st.session_state.num_cp_chars):
             cp_chars.append({
-                "name":     st.session_state.get(f"cpname_{i}", ""),
-                "intimacy": st.session_state.get(f"cpinti_{i}", "糖（甜蜜互動）"),
-                "notes":    st.session_state.get(f"cpnotes_{i}", ""),
+                "name":        st.session_state.get(f"cpname_{i}", ""),
+                "intimacy":    st.session_state.get(f"cpinti_{i}", "糖（甜蜜互動）"),
+                "notes":       st.session_state.get(f"cpnotes_{i}", ""),
+                "age":         st.session_state.get(f"cpapp_age_{i}", ""),
+                "height":      st.session_state.get(f"cpapp_height_{i}", ""),
+                "body_type":   st.session_state.get(f"cpapp_body_{i}", ""),
+                "face_shape":  st.session_state.get(f"cpapp_face_{i}", ""),
+                "eyes":        st.session_state.get(f"cpapp_eyes_{i}", ""),
+                "nose":        st.session_state.get(f"cpapp_nose_{i}", ""),
+                "mouth":       st.session_state.get(f"cpapp_mouth_{i}", ""),
+                "hair":        st.session_state.get(f"cpapp_hair_{i}", ""),
+                "skin":        st.session_state.get(f"cpapp_skin_{i}", ""),
+                "clothing":    st.session_state.get(f"cpapp_cloth_{i}", ""),
+                "voice":       st.session_state.get(f"cpapp_voice_{i}", ""),
+                "personality": st.session_state.get(f"cppersonality_{i}", ""),
+                "residence":   st.session_state.get(f"cpresidence_{i}", ""),
+                "background":  st.session_state.get(f"cpbackground_{i}", ""),
             })
         data = {
             "world_mode":       st.session_state.get("w_world_mode",       "作品世界"),
@@ -350,9 +378,23 @@ with st.sidebar:
                 _cp_load = [{"name": data["cp_character"], "intimacy": data.get("intimacy", "糖（甜蜜互動）")}]
             st.session_state.num_cp_chars = len(_cp_load)
             for _j, _cp in enumerate(_cp_load):
-                st.session_state[f"cpname_{_j}"] = _cp.get("name", "")
-                st.session_state[f"cpinti_{_j}"] = _cp.get("intimacy", "糖（甜蜜互動）")
-                st.session_state[f"cpnotes_{_j}"] = _cp.get("notes", "")
+                st.session_state[f"cpname_{_j}"]      = _cp.get("name", "")
+                st.session_state[f"cpinti_{_j}"]      = _cp.get("intimacy", "糖（甜蜜互動）")
+                st.session_state[f"cpnotes_{_j}"]     = _cp.get("notes", "")
+                st.session_state[f"cpapp_age_{_j}"]   = _cp.get("age", "")
+                st.session_state[f"cpapp_height_{_j}"]= _cp.get("height", "")
+                st.session_state[f"cpapp_body_{_j}"]  = _cp.get("body_type", "")
+                st.session_state[f"cpapp_face_{_j}"]  = _cp.get("face_shape", "")
+                st.session_state[f"cpapp_eyes_{_j}"]  = _cp.get("eyes", "")
+                st.session_state[f"cpapp_nose_{_j}"]  = _cp.get("nose", "")
+                st.session_state[f"cpapp_mouth_{_j}"] = _cp.get("mouth", "")
+                st.session_state[f"cpapp_hair_{_j}"]  = _cp.get("hair", "")
+                st.session_state[f"cpapp_skin_{_j}"]  = _cp.get("skin", "")
+                st.session_state[f"cpapp_cloth_{_j}"] = _cp.get("clothing", "")
+                st.session_state[f"cpapp_voice_{_j}"] = _cp.get("voice", "")
+                st.session_state[f"cppersonality_{_j}"]= _cp.get("personality", "")
+                st.session_state[f"cpresidence_{_j}"] = _cp.get("residence", "")
+                st.session_state[f"cpbackground_{_j}"]= _cp.get("background", "")
             n = data.get("num_extra_chars", 0)
             st.session_state.num_extra_chars = n
             for i, c in enumerate(data.get("extra_characters", [])):
@@ -591,6 +633,56 @@ with st.sidebar:
                     options=["清水（純愛暗戀）", "糖（甜蜜互動）", "甜虐（曖昧張力）", "熾熱（激情親密）"],
                     key=f"cpinti_{i}",
                 )
+
+                st.markdown("**外貌設定**")
+                _cp_c1, _cp_c2 = st.columns(2)
+                with _cp_c1:
+                    _cp_age    = st.text_input("年齡",   key=f"cpapp_age_{i}",    placeholder="例：25 歲")
+                with _cp_c2:
+                    _cp_height = st.text_input("身高",   key=f"cpapp_height_{i}", placeholder="例：178 cm")
+                _cp_body   = st.text_area("體型",   key=f"cpapp_body_{i}",
+                    placeholder="例：高挑結實，肩寬腰窄，線條有力量感…", height=60)
+                _cp_face   = st.text_input("臉型",  key=f"cpapp_face_{i}",
+                    placeholder="例：稜角分明，輪廓立體，下頷線清晰…")
+                st.caption("── 五官 ──")
+                _cp_eyes   = st.text_area("眼睛",  key=f"cpapp_eyes_{i}",
+                    placeholder="例：深邃雙眼皮，瞳色深棕，眼神銳利有壓迫感…", height=56)
+                _cp_nose   = st.text_input("鼻子", key=f"cpapp_nose_{i}",
+                    placeholder="例：鼻樑高挺，山根高，輪廓清晰…")
+                _cp_mouth  = st.text_area("嘴巴",  key=f"cpapp_mouth_{i}",
+                    placeholder="例：唇形俐落，唇色偏深，嘴角微微下壓帶冷意…", height=56)
+                st.caption("── 外表其他 ──")
+                _cp_hair   = st.text_area("髮型",  key=f"cpapp_hair_{i}",
+                    placeholder="例：短黑髮，側分，髮質濃密略顯凌亂…", height=60)
+                _cp_skin   = st.text_area("膚色",  key=f"cpapp_skin_{i}",
+                    placeholder="例：小麥色，健康的日曬膚色…", height=56)
+                _cp_cloth  = st.text_area("穿著風格", key=f"cpapp_cloth_{i}",
+                    placeholder="例：偏好簡約俐落，常穿黑白灰，不戴飾品…", height=60)
+                _cp_voice  = st.text_area("聲音與特徵", key=f"cpapp_voice_{i}",
+                    placeholder="例：聲音低沉，說話直接，習慣沉默，思考時會輕扣桌面…", height=56)
+
+                # Combine sub-fields into appearance string
+                _cpp_parts = []
+                if _cp_age.strip():    _cpp_parts.append(f"年齡：{_cp_age.strip()}")
+                if _cp_height.strip(): _cpp_parts.append(f"身高：{_cp_height.strip()}")
+                if _cp_body.strip():   _cpp_parts.append(f"體型：{_cp_body.strip()}")
+                if _cp_face.strip():   _cpp_parts.append(f"臉型：{_cp_face.strip()}")
+                if _cp_eyes.strip():   _cpp_parts.append(f"眼睛：{_cp_eyes.strip()}")
+                if _cp_nose.strip():   _cpp_parts.append(f"鼻子：{_cp_nose.strip()}")
+                if _cp_mouth.strip():  _cpp_parts.append(f"嘴巴：{_cp_mouth.strip()}")
+                if _cp_hair.strip():   _cpp_parts.append(f"髮型：{_cp_hair.strip()}")
+                if _cp_skin.strip():   _cpp_parts.append(f"膚色：{_cp_skin.strip()}")
+                if _cp_cloth.strip():  _cpp_parts.append(f"穿著：{_cp_cloth.strip()}")
+                if _cp_voice.strip():  _cpp_parts.append(f"聲音與特徵：{_cp_voice.strip()}")
+                cp_appearance = "；\n".join(_cpp_parts)
+
+                cp_personality = st.text_area("個性", key=f"cppersonality_{i}",
+                    placeholder="例：冷靜腹黑、話不多但觀察力敏銳…", height=60)
+                cp_residence = st.text_input("住的地方", key=f"cpresidence_{i}",
+                    placeholder="例：學校附近的獨居公寓…")
+                cp_background = st.text_area("背景故事", key=f"cpbackground_{i}",
+                    placeholder="例：家世顯赫但獨來獨往，過去有不為人知的傷…", height=72)
+
                 cp_notes = st.text_area(
                     "感情備注（特殊限制）",
                     key=f"cpnotes_{i}",
@@ -598,7 +690,11 @@ with st.sidebar:
                     height=68,
                     help="填寫後，此限制凌駕通用感情節奏，AI 必須全程遵守。適合設定「直女慢慢動搖」「單方面曖昧」「極度緩慢的感情線」等情境。",
                 )
-                cp_characters.append({"name": cp_name, "intimacy": cp_inti, "notes": cp_notes})
+                cp_characters.append({
+                    "name": cp_name, "intimacy": cp_inti, "notes": cp_notes,
+                    "appearance": cp_appearance, "personality": cp_personality,
+                    "residence": cp_residence, "background": cp_background,
+                })
         if not cp_characters:
             st.info("點擊「＋ 新增 CP 對象」加入配對角色")
 
