@@ -1027,6 +1027,8 @@ def stream_outline(
 **本章結尾**
 （最後一幕的具體描述，這將成為下一章的開場）
 
+⚠️【強制規定】必須完整輸出以上所有段落，尤其「本章結尾」不可省略或截斷，這是下一章銜接的唯一依據。
+
 輸出語言：{language}
 直接輸出大綱，不要前言或說明。"""
 
@@ -1063,7 +1065,7 @@ def stream_outline(
             {"role": "system", "content": _outline_system},
             {"role": "user", "content": prompt},
         ],
-        max_tokens=2500,
+        max_tokens=4000,
         temperature=0.75,
         stream=True,
     )
