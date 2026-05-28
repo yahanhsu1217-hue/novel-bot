@@ -64,10 +64,15 @@ if "_settings_initialized" not in st.session_state:
                      "perspective", "length_label", "total_chapters", "cp_type",
                      "love_tone", "pacing",
                      "name", "nickname", "gender", "personality", "appearance",
+                     "age", "height", "body_type", "face_shape", "eyes", "nose",
+                     "mouth", "hair", "skin", "clothing", "voice",
                      "residence", "background", "protagonist_facts", "plot_want", "plot_forbid",
                      "environment", "nsfw", "style_reference"]:
             if _key in _last:
                 st.session_state[f"w_{_key}"] = _last[_key]
+        for _mkey in ["manifest_partner", "manifest_job", "manifest_lifestyle"]:
+            if _mkey in _last:
+                st.session_state[f"w_{_mkey}"] = _last[_mkey]
         _cp_chars = _last.get("cp_characters", [])
         if not _cp_chars and _last.get("cp_character"):
             _cp_chars = [{"name": _last["cp_character"], "intimacy": _last.get("intimacy", "糖（甜蜜互動）")}]
@@ -113,6 +118,9 @@ for k, v in [
     # Widget defaults
     ("w_world_mode",      "作品世界"),
     ("w_world_input",     ""),
+    ("w_manifest_partner",    ""),
+    ("w_manifest_job",        ""),
+    ("w_manifest_lifestyle",  ""),
     ("w_character_notes", ""),
     ("w_environment",     ""),
     ("w_language",        "繁體中文"),
@@ -127,7 +135,18 @@ for k, v in [
     ("w_nickname",        ""),
     ("w_gender",          "女"),
     ("w_personality",     ""),
-    ("w_appearance",      ""),
+    ("w_appearance",      ""),  # kept for backward-compat migration
+    ("w_age",             ""),
+    ("w_height",          ""),
+    ("w_body_type",       ""),
+    ("w_face_shape",      ""),
+    ("w_eyes",            ""),
+    ("w_nose",            ""),
+    ("w_mouth",           ""),
+    ("w_hair",            ""),
+    ("w_skin",            ""),
+    ("w_clothing",        ""),
+    ("w_voice",           ""),
     ("w_residence",       ""),
     ("w_background",          ""),
     ("w_protagonist_facts",   ""),
@@ -237,6 +256,9 @@ with st.sidebar:
         data = {
             "world_mode":       st.session_state.get("w_world_mode",       "作品世界"),
             "world_input":      st.session_state.get("w_world_input",       ""),
+            "manifest_partner":  st.session_state.get("w_manifest_partner", ""),
+            "manifest_job":      st.session_state.get("w_manifest_job",     ""),
+            "manifest_lifestyle": st.session_state.get("w_manifest_lifestyle", ""),
             "character_notes":  st.session_state.get("w_character_notes",  ""),
             "environment":      st.session_state.get("w_environment",       ""),
             "language":         st.session_state.get("w_language",          "繁體中文"),
@@ -252,6 +274,17 @@ with st.sidebar:
             "gender":           st.session_state.get("w_gender",            "女"),
             "personality":      st.session_state.get("w_personality",       ""),
             "appearance":       st.session_state.get("w_appearance",        ""),
+            "age":              st.session_state.get("w_age",               ""),
+            "height":           st.session_state.get("w_height",            ""),
+            "body_type":        st.session_state.get("w_body_type",         ""),
+            "face_shape":       st.session_state.get("w_face_shape",        ""),
+            "eyes":             st.session_state.get("w_eyes",              ""),
+            "nose":             st.session_state.get("w_nose",              ""),
+            "mouth":            st.session_state.get("w_mouth",             ""),
+            "hair":             st.session_state.get("w_hair",              ""),
+            "skin":             st.session_state.get("w_skin",              ""),
+            "clothing":         st.session_state.get("w_clothing",          ""),
+            "voice":            st.session_state.get("w_voice",             ""),
             "residence":        st.session_state.get("w_residence",         ""),
             "background":       st.session_state.get("w_background",        ""),
             "protagonist_facts": st.session_state.get("w_protagonist_facts", ""),
@@ -281,10 +314,15 @@ with st.sidebar:
                         "perspective", "length_label", "total_chapters", "cp_type",
                         "love_tone", "pacing",
                         "name", "nickname", "gender", "personality", "appearance",
+                        "age", "height", "body_type", "face_shape", "eyes", "nose",
+                        "mouth", "hair", "skin", "clothing", "voice",
                         "residence", "background", "plot_want", "plot_forbid",
                         "environment", "nsfw", "style_reference"]:
                 if key in data:
                     st.session_state[f"w_{key}"] = data[key]
+            for _mkey in ["manifest_partner", "manifest_job", "manifest_lifestyle"]:
+                if _mkey in data:
+                    st.session_state[f"w_{_mkey}"] = data[_mkey]
             _cp_load = data.get("cp_characters", [])
             if not _cp_load and data.get("cp_character"):
                 _cp_load = [{"name": data["cp_character"], "intimacy": data.get("intimacy", "糖（甜蜜互動）")}]
@@ -401,7 +439,7 @@ with st.sidebar:
     # ── World setting ─────────────────────────────────────────────────────────
     st.markdown("### 🌍 世界設定")
     world_mode = st.radio(
-        "類型", ["作品世界", "原創世界"],
+        "類型", ["作品世界", "原創世界", "顯化日記"],
         horizontal=True, label_visibility="collapsed", key="w_world_mode",
     )
 
@@ -416,6 +454,34 @@ with st.sidebar:
             height=100,
             help="AI 會嚴格以此為準，避免外貌描寫出錯",
         )
+    elif world_mode == "顯化日記":
+        st.caption("✨ 描述你想顯化的理想生活，AI 將以日記形式寫出它已成真的故事")
+        _manifest_partner = st.text_area(
+            "理想伴侶", key="w_manifest_partner",
+            placeholder="例：外型：高挑、深邃眼睛、輪廓立體；個性：體貼溫柔、有安全感、幽默風趣；職業：設計師或創意工作者；相處方式：常一起煮早餐、週末旅行、總是記得我說過的小事…",
+            height=110,
+        )
+        _manifest_job = st.text_area(
+            "理想工作", key="w_manifest_job",
+            placeholder="例：遠端工作、月薪10萬以上、時間自由、工作內容有創意（如內容創作/設計/顧問）、每天只需專注工作4-6小時、完全不需要打卡或通勤…",
+            height=90,
+        )
+        _manifest_lifestyle = st.text_area(
+            "理想生活方式", key="w_manifest_lifestyle",
+            placeholder="例：住在有陽光的寬敞公寓、每天早晨喝咖啡看窗外、常去咖啡廳工作、週末去山或海旅行、生活有質感但不複雜、身邊都是正能量的人…",
+            height=90,
+        )
+        _manifest_parts = []
+        if _manifest_partner.strip():
+            _manifest_parts.append(f"【理想伴侶】\n{_manifest_partner.strip()}")
+        if _manifest_job.strip():
+            _manifest_parts.append(f"【理想工作】\n{_manifest_job.strip()}")
+        if _manifest_lifestyle.strip():
+            _manifest_parts.append(f"【理想生活方式】\n{_manifest_lifestyle.strip()}")
+        world_input = "\n\n".join(_manifest_parts) if _manifest_parts else ""
+        # Store composed world_input in session state for settings save
+        st.session_state["w_world_input"] = world_input
+        character_notes = ""
     else:
         world_input = st.text_area(
             "世界描述", key="w_world_input",
@@ -527,7 +593,52 @@ with st.sidebar:
     nickname    = st.text_input("暱稱",    key="w_nickname",    placeholder="其他角色對你的稱呼（可留空）")
     gender      = st.radio("性別", ["女", "男", "不設定"], horizontal=True, key="w_gender")
     personality = st.text_area("個性",    key="w_personality", placeholder="例：外冷內熱、敏銳果斷…",        height=72)
-    appearance  = st.text_area("外貌",    key="w_appearance",  placeholder="例：長黑髮、眼神銳利…",          height=72)
+
+    st.markdown("**外貌設定**")
+    _app_c1, _app_c2 = st.columns(2)
+    with _app_c1:
+        _app_age    = st.text_input("年齡",   key="w_age",    placeholder="例：22 歲")
+    with _app_c2:
+        _app_height = st.text_input("身高",   key="w_height", placeholder="例：168 cm")
+    _app_body   = st.text_area("體型",   key="w_body_type",
+        placeholder="例：纖細勻稱，腰肢纖細，臀部曲線含蓄圓潤，胸部豐滿適中…", height=68)
+    _app_face   = st.text_input("臉型",  key="w_face_shape",
+        placeholder="例：標準瓜子臉，下頷線條柔和，顴骨不高…")
+    st.caption("── 五官 ──")
+    _app_eyes   = st.text_area("眼睛",  key="w_eyes",
+        placeholder="例：微微上挑的內雙丹鳳眼，瞳色深接近黑色，眼神沉靜有穿透力…", height=60)
+    _app_nose   = st.text_input("鼻子", key="w_nose",
+        placeholder="例：小巧挺拔，鼻樑細窄，鼻翼秀氣…")
+    _app_mouth  = st.text_area("嘴巴",  key="w_mouth",
+        placeholder="例：唇形偏薄，唇峰弧度優美，唇色淡粉，不笑時有清冷距離感…", height=60)
+    st.caption("── 外表其他 ──")
+    _app_hair   = st.text_area("髮型",  key="w_hair",
+        placeholder="例：及腰黑色直髮，髮質如絲綢，常盤低髻，偶爾放下時沿背脊垂落…", height=68)
+    _app_skin   = st.text_area("膚色",  key="w_skin",
+        placeholder="例：冷白皮，膚質細膩近乎無瑕，唇與指間透淡粉色…", height=60)
+    _app_cloth  = st.text_area("穿著風格", key="w_clothing",
+        placeholder="例：偏好低調有質感，常穿亞麻襯衫、百褶長裙，顏色多灰白藏青，愛戴細銀鍊…", height=68)
+    _app_voice  = st.text_area("聲音與特徵", key="w_voice",
+        placeholder="例：聲音輕柔偏低，語速慢，緊張時習慣用食指輕點桌面，身上有淡淡皂香…", height=60)
+
+    # Combine sub-fields into appearance string used by _collect_settings()
+    _app_parts = []
+    if _app_age.strip():   _app_parts.append(f"年齡：{_app_age.strip()}")
+    if _app_height.strip():_app_parts.append(f"身高：{_app_height.strip()}")
+    if _app_body.strip():  _app_parts.append(f"體型：{_app_body.strip()}")
+    if _app_face.strip():  _app_parts.append(f"臉型：{_app_face.strip()}")
+    if _app_eyes.strip():  _app_parts.append(f"眼睛：{_app_eyes.strip()}")
+    if _app_nose.strip():  _app_parts.append(f"鼻子：{_app_nose.strip()}")
+    if _app_mouth.strip(): _app_parts.append(f"嘴巴：{_app_mouth.strip()}")
+    if _app_hair.strip():  _app_parts.append(f"髮型：{_app_hair.strip()}")
+    if _app_skin.strip():  _app_parts.append(f"膚色：{_app_skin.strip()}")
+    if _app_cloth.strip(): _app_parts.append(f"穿著：{_app_cloth.strip()}")
+    if _app_voice.strip(): _app_parts.append(f"聲音與特徵：{_app_voice.strip()}")
+    appearance = "；\n".join(_app_parts)
+    # Migration fallback: use old combined field if all sub-fields are empty
+    if not appearance:
+        appearance = st.session_state.get("w_appearance", "")
+
     residence   = st.text_input("住的地方", key="w_residence",  placeholder="例：廢棄工廠頂樓、學生宿舍302室…")
     background  = st.text_area("背景故事", key="w_background",  placeholder="例：記憶缺失的前特工…",           height=90)
     protagonist_facts = st.text_area(
@@ -737,11 +848,17 @@ def _save_session():
 def _validate(s: dict) -> list[str]:
     missing = []
     if not s["world_input"]:
-        missing.append("作品名稱" if s["world_mode"] == "作品世界" else "世界描述")
+        if s["world_mode"] == "作品世界":
+            missing.append("作品名稱")
+        elif s["world_mode"] == "顯化日記":
+            missing.append("至少填寫一項顯化目標（理想伴侶、工作或生活方式）")
+        else:
+            missing.append("世界描述")
     if not s["name"]:         missing.append("姓名")
     if not s["personality"]:  missing.append("個性")
     if not s["appearance"]:   missing.append("外貌")
-    if not s["background"]:   missing.append("背景故事")
+    if s["world_mode"] != "顯化日記" and not s["background"]:
+        missing.append("背景故事")
     if s["cp_type"] == "我 × 角色" and not any(c.get("name", "").strip() for c in s.get("cp_characters", [])):
         missing.append("至少一個配對角色名稱")
     return missing
@@ -994,7 +1111,10 @@ if start_btn:
 # ── Main display ──────────────────────────────────────────────────────────────
 
 st.markdown("## 📖 小說連載生成器")
-st.caption("作品同人 × 原創世界 × 連載章節，把自己寫進故事裡")
+if st.session_state.get("w_world_mode") == "顯化日記":
+    st.caption("✨ 顯化日記模式 × 把理想生活寫成真實故事，讓宇宙看見你的未來")
+else:
+    st.caption("作品同人 × 原創世界 × 連載章節，把自己寫進故事裡")
 
 s = st.session_state.saved_settings
 _has_settings = bool(s.get("world_input", ""))
