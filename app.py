@@ -1680,7 +1680,7 @@ with _tab_chapters:
 
             if _sum_btn:
                 with st.spinner(f"📝 為第 {i+1} 章製作摘要…"):
-                    _new_sum, _new_bible = summarize_chapter(client, text, i + 1)
+                    _new_sum, _new_bible = summarize_chapter(_get_active_client(), text, i + 1)
                 _ov_t = st.session_state.get("early_overview_through", 0)
                 _sidx = i - _ov_t
                 if _sidx >= 0:
