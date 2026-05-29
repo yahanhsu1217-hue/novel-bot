@@ -1356,6 +1356,8 @@ with _tab_outlines:
             )
             try:
                 _bulk_gen_hint = st.session_state.get(f"ol_gen_{_ch_num_ol - 1}", "")
+                _bulk_ending_hint = st.session_state.get(f"ol_ending_{_ch_num_ol - 1}", "")
+                _bulk_opening_hint = st.session_state.get(f"ol_opening_{_ch_num_ol - 1}", "")
                 for _chunk in stream_outline(
                     client=_get_active_client(),
                     chapter_num=_ch_num_ol,
@@ -1366,6 +1368,8 @@ with _tab_outlines:
                     prev_outlines=_prev_ols_str,
                     is_final=(_ch_num_ol >= _s_ol["total_chapters"]),
                     chapter_directive=_bulk_gen_hint,
+                    opening_suggestion=_bulk_opening_hint,
+                    ending_suggestion=_bulk_ending_hint,
                     batch_hint=st.session_state.get("_ol_batch_hint", ""),
                     **_s_ol,
                 ):
@@ -1411,7 +1415,7 @@ with _tab_outlines:
                     _ol_gen = st.text_area(
                         "生成建議",
                         key=f"ol_gen_{_oi}",
-                        placeholder="例：這章要有兩人在雨中相遇\n例：結尾安排誤會事件\n例：出現第三個角色破壞氣氛",
+                        placeholder="例：這章要有兩人在雨中相遇\n例：出現第三個角色破壞氣氛",
                         height=90,
                         label_visibility="collapsed",
                     )
@@ -1420,7 +1424,26 @@ with _tab_outlines:
                     _ol_note = st.text_area(
                         "修正建議",
                         key=f"ol_note_{_oi}",
-                        placeholder="例：Leo不是員工，他跟所有人都不認識\n例：主角不會開車\n例：這章不要出現室內場景",
+                        placeholder="例：Leo不是員工，他跟所有人都不認識\n例：主角不會開車",
+                        height=90,
+                        label_visibility="collapsed",
+                    )
+                _hint_c3, _hint_c4 = st.columns(2)
+                with _hint_c3:
+                    st.caption("🌅 開頭建議（本章場景設定與第一幕必須照此方向開展）")
+                    _ol_opening = st.text_area(
+                        "開頭建議",
+                        key=f"ol_opening_{_oi}",
+                        placeholder="例：清晨六點，澄夏在浴室看到床單上的痕跡\n例：從若渝假裝若無其事地煮早餐開始",
+                        height=90,
+                        label_visibility="collapsed",
+                    )
+                with _hint_c4:
+                    st.caption("🎬 結尾建議（本章最後一幕必須照此方向收尾）")
+                    _ol_ending = st.text_area(
+                        "結尾建議",
+                        key=f"ol_ending_{_oi}",
+                        placeholder="例：若渝站在門縫外，看完後默默離開\n例：兩人在雨中對視，誰也沒有先說話",
                         height=90,
                         label_visibility="collapsed",
                     )
@@ -1452,6 +1475,8 @@ with _tab_outlines:
                                 is_final=(_oi + 1 >= _s_rg["total_chapters"]),
                                 chapter_directive=_ol_gen,
                                 outline_note=_ol_note,
+                                opening_suggestion=_ol_opening,
+                                ending_suggestion=_ol_ending,
                                 **_s_rg,
                             ):
                                 _new_ol += _chunk
