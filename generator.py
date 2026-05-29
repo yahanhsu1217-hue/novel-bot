@@ -992,14 +992,22 @@ def stream_outline(
         f"{ending_suggestion}"
         if ending_suggestion.strip() else ""
     )
-    _ending_format_hint = "；必須符合上方【本章結尾建議】的方向" if ending_suggestion.strip() else ""
+    _ending_format_line = (
+        f"（⚠️ 必須嚴格按照以下方向收尾，不可偏離：{ending_suggestion.strip()}）"
+        if ending_suggestion.strip()
+        else "（最後一幕的具體描述，這將成為下一章的開場）"
+    )
     opening_part = (
         f"\n\n⚠️⚠️【本章開頭建議 — 最高優先，必須執行】\n"
         f"「場景設定」與第一個情節點必須按以下建議方向開展，不可偏離：\n"
         f"{opening_suggestion}"
         if opening_suggestion.strip() else ""
     )
-    _opening_format_hint = "；必須符合上方【本章開頭建議】的方向" if opening_suggestion.strip() else ""
+    _opening_format_line = (
+        f"（⚠️ 必須嚴格按照以下方向開展，不可偏離：{opening_suggestion.strip()}）"
+        if opening_suggestion.strip()
+        else "（地點 / 時間 / 氛圍，1-2句）"
+    )
     plot_part = ""
     if plot_want:
         plot_part += f"\n希望出現的元素：{plot_want}"
@@ -1027,7 +1035,7 @@ def stream_outline(
 請輸出具體可執行的大綱，格式如下（每項都要具體，不可模糊）：
 
 **場景設定**
-（地點 / 時間 / 氛圍{_opening_format_hint}，1-2句）
+{_opening_format_line}
 
 **本章情節（依序發生，每點30字以上）**
 1.
@@ -1043,7 +1051,7 @@ def stream_outline(
 （若有CP，描述本章感情關係的具體變化；需符合感情備注的限制）
 
 **本章結尾**
-（最後一幕的具體描述{_ending_format_hint}，這將成為下一章的開場）
+{_ending_format_line}
 
 ⚠️【強制規定】必須完整輸出以上所有段落，尤其「本章結尾」不可省略或截斷，這是下一章銜接的唯一依據。
 
