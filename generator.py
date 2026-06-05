@@ -1041,13 +1041,12 @@ def stream_outline(
         cp_info = f"CP：{name} × {cp_names}" if cp_type == "我 × 角色" else f"CP：{cp_names}"
         for c in _cp_valid:
             _cname = c["name"].strip()
-            _parts = []
+            if c.get("appearance"):
+                cp_info += f"\n{_cname} 外貌：{c['appearance']}"
             if c.get("personality"):
-                _parts.append(f"個性：{c['personality']}")
+                cp_info += f"\n{_cname} 個性：{c['personality']}"
             if c.get("background"):
-                _parts.append(f"背景／職業：{c['background']}")
-            if _parts:
-                cp_info += f"\n{_cname}　" + "　".join(_parts)
+                cp_info += f"\n{_cname} 背景／職業：{c['background']}"
             notes = c.get("notes", "").strip()
             if notes:
                 cp_info += f"\n{_cname} 感情備注（必須嚴格遵守）：{notes}"
