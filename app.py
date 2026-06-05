@@ -6,12 +6,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import streamlit as st
 import streamlit.components.v1 as components
 from openai import OpenAI
 
 from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, GEMINI_API_KEY, GEMINI_BASE_URL, LENGTH_CHARS
-from generator import stream_chapter, stream_outline, summarize_chapter, extract_story_bible, fix_consistency, fix_sensory_crutches, fix_repetitive_paragraphs, fix_cross_chapter_repetition, extract_paragraph_starters, analyze_writing_style, STYLE_PRESETS, compress_old_summaries
+from generator import stream_chapter, stream_outline, summarize_chapter, extract_story_bible, outline_from_chapter, fix_consistency, fix_sensory_crutches, fix_repetitive_paragraphs, fix_cross_chapter_repetition, fix_range_patterns, fix_passive_negations, fix_nagu_patterns, extract_paragraph_starters, analyze_writing_style, STYLE_PRESETS, compress_old_summaries
 from training import ISSUE_TYPES, add_note, delete_note, load_notes, notes_to_prompt_block
 
 LAST_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_settings.json")
@@ -416,6 +417,28 @@ with st.sidebar:
                 st.session_state[f"csk_{i}"]       = c.get("skills", "")
                 st.session_state[f"cr_{i}"]        = c.get("relationship", "")
             st.session_state.last_loaded_file = uploaded.name
+            # Sync saved_settings so chapter generation is immediately unlocked
+            _saved_keys = ["world_mode", "world_input", "language", "perspective",
+                           "length_label", "cp_type", "pacing", "love_tone",
+                           "name", "nickname", "gender", "personality", "appearance",
+                           "background", "protagonist_facts", "plot_want", "plot_forbid",
+                           "total_chapters", "character_notes", "environment", "residence", "nsfw"]
+            _synced = {k: data[k] for k in _saved_keys if k in data}
+            _synced["cp_characters"] = data.get("cp_characters", [])
+            _synced["extra_characters"] = data.get("extra_characters", [])
+            st.session_state.saved_settings = _synced
+            # Also persist to session file so it survives refresh
+            try:
+                with open(LAST_SESSION_FILE, "r", encoding="utf-8") as _rf:
+                    _sess_data = json.load(_rf)
+            except Exception:
+                _sess_data = {}
+            _sess_data["saved_settings"] = _synced
+            try:
+                with open(LAST_SESSION_FILE, "w", encoding="utf-8") as _wf:
+                    json.dump(_sess_data, _wf, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
             st.rerun()
         except Exception as e:
             st.error(f"載入失敗：{e}")
@@ -431,8 +454,24 @@ with st.sidebar:
     )
     if _novel_file and _novel_file.name != st.session_state.get("_last_novel_upload"):
         _raw = _novel_file.read().decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
-        _parsed = [c.strip() for c in _raw.split("\n\n\n") if c.strip()]
+        # Try "#第x章" heading separator (space after # is optional, e.g. #第一章 or # 第二章)
+        _chapter_heading_re = re.compile(r"(?=^#\s*第[一二三四五六七八九十百千萬零]+章)", re.MULTILINE)
+        _parsed = [c.strip() for c in _chapter_heading_re.split(_raw) if c.strip()]
+        # Fall back to triple-newline (this app's own export format)
+        if len(_parsed) <= 1:
+            _parsed = [c.strip() for c in _raw.split("\n\n\n") if c.strip()]
+        # Last resort: double-newline
+        if len(_parsed) <= 1 and _raw.count("\n\n") > 2:
+            _parsed_alt = [c.strip() for c in _raw.split("\n\n") if c.strip()]
+            if len(_parsed_alt) > len(_parsed):
+                _parsed = _parsed_alt
         if _parsed:
+            # Preserve saved_settings: use current sidebar widget state if previously empty
+            if not st.session_state.saved_settings:
+                try:
+                    st.session_state.saved_settings = json.loads(_current_settings_json())
+                except Exception:
+                    pass
             st.session_state.chapters    = _parsed
             st.session_state.summaries   = []
             st.session_state.story_bible = {"banned_phrases": [], "used_tropes": [], "open_threads": [], "established_facts": [], "paragraph_starters": [], "asked_questions": []}
@@ -445,7 +484,7 @@ with st.sidebar:
                 pass
             st.rerun()
         else:
-            st.error("無法解析文章，請確認格式正確")
+            st.error(f"無法解析文章（共 {len(_raw)} 字，找不到章節分隔符），請確認格式正確")
 
     st.divider()
 
@@ -599,7 +638,7 @@ with st.sidebar:
     )
     pacing = st.selectbox(
         "敘事節奏",
-        options=["緩節奏・情緒內斂", "緩節奏・情緒爆發", "快節奏・情緒內斂", "快節奏・情緒爆發", "張弛交替・積蓄爆發"],
+        options=["緩節奏・日常堆疊", "緩節奏・情緒內斂", "緩節奏・情緒爆發", "快節奏・情緒內斂", "快節奏・情緒爆發", "張弛交替・積蓄爆發"],
         key="w_pacing",
         help="控制場景該快還是慢、情緒該藏還是爆",
     )
@@ -609,11 +648,11 @@ with st.sidebar:
     # ── CP ────────────────────────────────────────────────────────────────────
     st.markdown("### 💞 CP 設定")
     cp_type = st.radio(
-        "配對", ["無 CP", "我 × 角色"],
+        "配對", ["無 CP", "我 × 角色", "角色 × 角色"],
         horizontal=True, label_visibility="collapsed", key="w_cp_type",
     )
     cp_characters = []
-    if cp_type == "我 × 角色":
+    if cp_type in ("我 × 角色", "角色 × 角色"):
         col_cp_add, col_cp_del = st.columns(2)
         with col_cp_add:
             if st.button("＋ 新增 CP 對象", use_container_width=True):
@@ -700,7 +739,7 @@ with st.sidebar:
 
     love_tone = st.selectbox(
         "戀愛情緒基調",
-        options=["甜蜜溫馨", "歡喜冤家", "虐心糾纏", "青春悸動", "禁忌張力", "宿命糾纏"],
+        options=["慢熟溫柔", "甜蜜溫馨", "歡喜冤家", "虐心糾纏", "青春悸動", "禁忌張力", "宿命糾纏"],
         key="w_love_tone",
         help="整個故事的戀愛情感氛圍走向",
     )
@@ -1032,7 +1071,7 @@ def _validate(s: dict) -> list[str]:
     if not s["appearance"]:   missing.append("外貌")
     if s["world_mode"] != "顯化日記" and not s["background"]:
         missing.append("背景故事")
-    if s["cp_type"] == "我 × 角色" and not any(c.get("name", "").strip() for c in s.get("cp_characters", [])):
+    if s["cp_type"] in ("我 × 角色", "角色 × 角色") and not any(c.get("name", "").strip() for c in s.get("cp_characters", [])):
         missing.append("至少一個配對角色名稱")
     return missing
 
@@ -1137,6 +1176,9 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
         _should_fallback = (
             "429" in _err
             or "402" in _err
+            or "502" in _err
+            or "503" in _err
+            or "Bad Gateway" in _err
             or "rate" in _err.lower()
             or "quota" in _err.lower()
             or "insufficient" in _err.lower()
@@ -1186,6 +1228,30 @@ def generate_chapter(settings: dict, chapter_num: int, prev_text: str = "", is_f
                 f'<div class="chapter-box">{full_text}</div>',
                 unsafe_allow_html=True,
             )
+    with st.spinner("✍️ 改寫重複方位句型…"):
+        full_text = fix_range_patterns(active_client, full_text, preserve_ending=preserve_ending)
+        if preserve_ending:
+            full_text = _trim_to_original_end(full_text[:_pre_fix_len], full_text)
+        placeholder.markdown(
+            f'<div class="chapter-box">{full_text}</div>',
+            unsafe_allow_html=True,
+        )
+    with st.spinner("✍️ 改寫重複否定靜止句…"):
+        full_text = fix_passive_negations(active_client, full_text, preserve_ending=preserve_ending)
+        if preserve_ending:
+            full_text = _trim_to_original_end(full_text[:_pre_fix_len], full_text)
+        placeholder.markdown(
+            f'<div class="chapter-box">{full_text}</div>',
+            unsafe_allow_html=True,
+        )
+    with st.spinner("✍️ 改寫重複「那股X」句型…"):
+        full_text = fix_nagu_patterns(active_client, full_text, preserve_ending=preserve_ending)
+        if preserve_ending:
+            full_text = _trim_to_original_end(full_text[:_pre_fix_len], full_text)
+        placeholder.markdown(
+            f'<div class="chapter-box">{full_text}</div>',
+            unsafe_allow_html=True,
+        )
     if len(st.session_state.chapters) >= 1:
         with st.spinner("🔁 全文跨章重複段落偵測…"):
             full_text = fix_cross_chapter_repetition(active_client, full_text, st.session_state.chapters, nsfw=settings.get("nsfw", False))
@@ -1296,7 +1362,7 @@ _live_settings_ready = bool(world_input.strip()) and bool(name.strip())
 if _has_settings:
     world_label = f"《{s['world_input']}》" if s["world_mode"] == "作品世界" else s["world_input"][:30] + "…"
     _cp_names = "、".join(c["name"] for c in s.get("cp_characters", []) if c.get("name", "").strip())
-    cp_label = f"♡ {_cp_names}" if s["cp_type"] == "我 × 角色" and _cp_names else "無 CP"
+    cp_label = f"♡ {_cp_names}" if s["cp_type"] in ("我 × 角色", "角色 × 角色") and _cp_names else "無 CP"
     st.markdown(f"**{world_label}**　·　{s['name']}　·　{s['language']}　·　{s['length_label']}　·　{cp_label}")
 elif st.session_state.chapters:
     st.info("已載入文章。若需要 AI 重新生成，請一併在左側載入設定檔（.json）。")
@@ -1595,7 +1661,43 @@ with _tab_outlines:
             _save_session()
             st.rerun()
     else:
-        st.info("尚無大綱。點擊「生成大綱」規劃各章節大綱，生成章節時將自動依此撰寫。")
+        # If chapters were uploaded but have no outlines, offer to back-fill them
+        if st.session_state.chapters:
+            _backfill_count = len(st.session_state.chapters)
+            st.info(f"已載入 {_backfill_count} 章，尚無大綱。可從章節內容自動補齊大綱，方便查閱故事脈絡。")
+            _bf_c1, _bf_c2 = st.columns([3, 1])
+            with _bf_c1:
+                _bf_n = st.number_input(
+                    "要補齊幾章的大綱",
+                    min_value=1, max_value=_backfill_count,
+                    value=_backfill_count, step=1,
+                    key="_bf_ol_count",
+                )
+            with _bf_c2:
+                st.write("")
+                _bf_btn = st.button("🔄 從章節補齊大綱", use_container_width=True,
+                                    key="_bf_ol_btn", type="primary")
+            if _bf_btn:
+                _bf_prog = st.progress(0, text="從章節提取大綱中…")
+                _bf_client = _get_active_client()
+                for _bf_i in range(int(_bf_n)):
+                    _ch_idx = len(st.session_state.outlines)
+                    _ch_num = _ch_idx + 1
+                    try:
+                        _ol_text = outline_from_chapter(_bf_client, st.session_state.chapters[_ch_idx], _ch_num)
+                        st.session_state.outlines.append(_ol_text)
+                    except Exception as _bf_e:
+                        st.error(f"第 {_ch_num} 章大綱提取失敗：{_bf_e}")
+                        break
+                    _bf_prog.progress(
+                        (_bf_i + 1) / int(_bf_n),
+                        text=f"從章節提取大綱中…（{_bf_i + 1}/{int(_bf_n)}）",
+                    )
+                _bf_prog.empty()
+                _save_session()
+                st.rerun()
+        else:
+            st.info("尚無大綱。點擊「生成大綱」規劃各章節大綱，生成章節時將自動依此撰寫。")
 
 with _tab_summaries:
     st.markdown("#### 📝 章節摘要管理")
@@ -1604,6 +1706,54 @@ with _tab_summaries:
     else:
         st.caption("AI 自動生成的摘要，供後續章節生成時參考。可直接修改，避免 AI 誤記。")
         _ov_through = st.session_state.get("early_overview_through", 0)
+
+        # Batch-generate summaries for chapters that don't have one yet (e.g. after txt upload)
+        _unsummarized_count = len(st.session_state.chapters) - len(st.session_state.summaries)
+        if _unsummarized_count > 0:
+            _unsumm_start = _ov_through + len(st.session_state.summaries) + 1
+            st.info(f"有 {_unsummarized_count} 個章節尚未生成摘要（第 {_unsumm_start} 章起）。")
+            _sbg_c1, _sbg_c2 = st.columns([3, 1])
+            with _sbg_c1:
+                _sbg_count = st.number_input(
+                    "要生成幾章的摘要",
+                    min_value=1, max_value=_unsummarized_count,
+                    value=_unsummarized_count, step=1,
+                    key="_sbg_count",
+                )
+            with _sbg_c2:
+                st.write("")
+                _sbg_btn = st.button("🔄 批量生成摘要", use_container_width=True, key="_sbg_btn", type="primary")
+            if _sbg_btn:
+                _sbg_prog = st.progress(0, text="生成摘要中…")
+                _sbg_client = _get_active_client()
+                for _sbg_i in range(int(_sbg_count)):
+                    _ch_idx = len(st.session_state.summaries)
+                    _ch_num = _ov_through + _ch_idx + 1
+                    try:
+                        _sbg_sum, _sbg_bible = summarize_chapter(
+                            _sbg_client, st.session_state.chapters[_ch_idx], _ch_num
+                        )
+                        st.session_state.summaries.append(_sbg_sum)
+                        _sb = st.session_state.story_bible
+                        _sb["banned_phrases"] = (_sb["banned_phrases"] + _sbg_bible.get("banned_phrases", []))[-40:]
+                        _sb["used_tropes"] = (_sb["used_tropes"] + _sbg_bible.get("used_tropes", []))[-20:]
+                        _sb["open_threads"] = _sbg_bible.get("open_threads", _sb["open_threads"])
+                        _sb.setdefault("established_facts", [])
+                        _sb["established_facts"] = (_flatten_facts(_sb["established_facts"]) + _flatten_facts(_sbg_bible.get("established_facts", [])))[-80:]
+                        _sb.setdefault("asked_questions", [])
+                        _sb["asked_questions"] = list(dict.fromkeys(_flatten_strs(_sb["asked_questions"]) + _flatten_strs(_sbg_bible.get("asked_questions", []))))
+                    except Exception as _sbg_e:
+                        st.error(f"第 {_ch_num} 章摘要生成失敗：{_sbg_e}")
+                        break
+                    _sbg_prog.progress(
+                        (_sbg_i + 1) / int(_sbg_count),
+                        text=f"生成摘要中…（{_sbg_i + 1}/{int(_sbg_count)}）",
+                    )
+                _sbg_prog.empty()
+                _save_session()
+                st.rerun()
+            st.divider()
+
         if st.session_state.get("early_overview"):
             st.markdown(f"**早期故事總覽（第 1～{_ov_through} 章）**")
             _ov_val = st.text_area(

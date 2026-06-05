@@ -56,6 +56,20 @@ def extract_story_bible(client: OpenAI, chapter_text: str, chapter_num: int) -> 
     return bible
 
 
+def outline_from_chapter(client: OpenAI, chapter_text: str, chapter_num: int) -> str:
+    """Read an existing chapter and produce a concise outline (150-250 chars) describing what happened."""
+    resp = client.chat.completions.create(
+        model=_model_for(client),
+        messages=[{"role": "user", "content":
+            f"請為以下第 {chapter_num} 章內容，用 150–250 字寫一段大綱摘述。"
+            f"格式：條列重點事件與情感進展，保留關鍵場景與轉折，不加標題。\n\n{chapter_text}"
+        }],
+        max_tokens=400,
+        temperature=0.2,
+    )
+    return resp.choices[0].message.content.strip()
+
+
 def compress_old_summaries(
     client: OpenAI,
     existing_overview: str,
@@ -183,6 +197,115 @@ def fix_sensory_crutches(client: OpenAI, chapter_text: str, preserve_ending: boo
     return result if result else chapter_text
 
 
+def fix_range_patterns(client: OpenAI, chapter_text: str, preserve_ending: bool = False) -> str:
+    """Rewrite overused 從X到X / 從X蔓延到Y sentence-structure patterns."""
+    import re
+    count = len(re.findall(r'從[^，。！？\n]{1,20}(?:到|變成|轉變為|蔓延到|延伸到|擴散到)[^，。！？\n]{1,25}', chapter_text))
+    if count <= 2:
+        return chapter_text
+    ending_rule = (
+        "- 【結尾保護】最後一段是作者設定的強制結尾，嚴禁改寫或在其後添加任何文字\n"
+        if preserve_ending else ""
+    )
+    resp = client.chat.completions.create(
+        model=_model_for(client),
+        messages=[{"role": "user", "content":
+            f"以下章節中，「從X到Y」「從X變成Y」「從X蔓延到Y」「從X延伸到Y」等狀態推進句型出現了 {count} 次，嚴重超標（上限為 2 次）。\n\n"
+            "需要找出並改寫的模式包括（全部必須處理）：\n"
+            "① 連續鏡像翻轉：「從A到B，從B到A」→ 只保留一個方向，另一個改寫\n"
+            "② 連續遞進：「從A變成B，從B變成C」「從A到B，從B到C」→ 直接寫最終狀態 C\n"
+            "③ 相同骨架在同一段重複出現兩次以上\n\n"
+            "改寫原則：\n"
+            "- 整章保留最多 2 個「從X到X」句，其餘全部改寫\n"
+            "- 改用結果狀態直接呈現：「腿部肌肉發硬」而非「從大腿到腹部蔓延」\n"
+            "- 改用動作主詞切入：「腰肢不受控地扭動」「腹肌繃緊收縮」\n"
+            "- 改用聲音或觸感直接切入：「布料間擠出細微的水聲」\n"
+            "- 只改「從X到X」骨架的句子，其餘文字完全不動\n"
+            f"{ending_rule}"
+            "- 直接輸出修改後的完整章節正文，不加任何說明或標記\n"
+            "- 必須輸出完整全文，不可截斷\n\n"
+            f"{chapter_text}"
+        }],
+        max_tokens=8000,
+        temperature=0.5,
+    )
+    result = resp.choices[0].message.content.strip()
+    return result if result else chapter_text
+
+
+def fix_nagu_patterns(client: OpenAI, chapter_text: str, preserve_ending: bool = False) -> str:
+    """Rewrite overused 那股X sentence-opening patterns."""
+    import re
+    count = len(re.findall(r'那股[^，。！？\n]{1,20}', chapter_text))
+    if count <= 4:
+        return chapter_text
+    ending_rule = (
+        "- 【結尾保護】最後一段是作者設定的強制結尾，嚴禁改寫或在其後添加任何文字\n"
+        if preserve_ending else ""
+    )
+    resp = client.chat.completions.create(
+        model=_model_for(client),
+        messages=[{"role": "user", "content":
+            f"以下章節中，「那股X」句型（如「那股觸感」「那股濕熱感」「那股溫熱」「那股心跳」）出現了 {count} 次，嚴重超標（上限為 4 次）。\n\n"
+            "「那股X」是一種中繼結構：先命名感受，再描述它，等於描述了兩次。\n"
+            "請找出超標的部分，改用直接描述法：\n\n"
+            "改寫原則：\n"
+            "- 以感受的來源當主詞，直接描述動作或狀態，不用「那股」作為過渡\n"
+            "- ✗「那股觸感透過布料傳來——溫熱的，帶著黏性」\n"
+            "  ✓「布料貼著皮膚，溫熱的，帶著黏性」\n"
+            "- ✗「那股濕熱感從陰道深處滲出」\n"
+            "  ✓「體液從陰道深處滲出，溫熱的，在皮膚上擴散」\n"
+            "- ✗「那股心跳透過兩層布料傳來——規律的，穩定的」\n"
+            "  ✓「心跳從胸口傳過來，規律的，穩定的」\n"
+            "- 整章保留最多 4 個「那股」，其餘全部改寫\n"
+            "- 只改「那股X」句，其餘文字完全不動\n"
+            f"{ending_rule}"
+            "- 直接輸出修改後的完整章節正文，不加任何說明或標記\n"
+            "- 必須輸出完整全文，不可截斷\n\n"
+            f"{chapter_text}"
+        }],
+        max_tokens=8000,
+        temperature=0.4,
+    )
+    result = resp.choices[0].message.content.strip()
+    return result if result else chapter_text
+
+
+def fix_passive_negations(client: OpenAI, chapter_text: str, preserve_ending: bool = False) -> str:
+    """Rewrite overused 她沒有X / 角色名沒有X standalone negation sentences."""
+    import re
+    count = len(re.findall(r'(?:她|他|若渝|林澄夏|[^\s，。！？\n]{2,4})沒有[^，。！？\n]{1,12}[。]', chapter_text))
+    if count <= 3:
+        return chapter_text
+    ending_rule = (
+        "- 【結尾保護】最後一段是作者設定的強制結尾，嚴禁改寫或在其後添加任何文字\n"
+        if preserve_ending else ""
+    )
+    resp = client.chat.completions.create(
+        model=_model_for(client),
+        messages=[{"role": "user", "content":
+            f"以下章節中，「她沒有X。」「他沒有X。」「角色名沒有X。」等否定靜止句型出現了 {count} 次，嚴重超標（上限為 3 次）。\n\n"
+            "這類句子用來表達角色的無聲允許或被動反應，但重複出現會失去張力。\n"
+            "請找出超過的部分，用「描寫發生了什麼」來替代「描寫沒發生什麼」：\n\n"
+            "改寫原則：\n"
+            "- 「她沒有退開」→ 描寫她的身體保持靜止的具體狀態，或她在做什麼小動作（調整重心、眼睛看向別處）\n"
+            "- 「她沒有說話」→ 描寫她的表情、呼吸、或環境聲音填補的沉默\n"
+            "- 「她沒有阻止」→ 描寫她的手的位置、肌肉的鬆弛、或她的視線落在哪裡\n"
+            "- 「她沒有推開」→ 直接跳到下一個動作，讓讀者從上下文理解她的態度\n"
+            "- 整章保留最多 3 個此類句子，其餘全部改寫\n"
+            "- 只改否定靜止句，其餘文字完全不動\n"
+            f"{ending_rule}"
+            "- 直接輸出修改後的完整章節正文，不加任何說明或標記\n"
+            "- 必須輸出完整全文，不可截斷\n\n"
+            f"{chapter_text}"
+        }],
+        max_tokens=8000,
+        temperature=0.5,
+    )
+    result = resp.choices[0].message.content.strip()
+    return result if result else chapter_text
+
+
 def _para_key(text: str) -> str:
     """Normalize paragraph opening for comparison: strip punctuation/spaces, keep content chars."""
     import re
@@ -300,6 +423,7 @@ _SYSTEM = """你是一位頂尖的小說作家，擅長創作沉浸感強的連�
 - 所有角色的姓名、外貌、個性、住所、關係，嚴格按照用戶設定，不可自行更改或忽略
 - 所有角色（包括主角與配角）的姓名必須全程使用用戶填寫的原始名稱，禁止翻譯、音譯、縮寫、取暱稱或改為其他語言的近似詞。例如：用戶填寫「Dalon」就必須全程寫「Dalon」，絕不可寫成「達隆」「大龍」或任何中文近似詞；填寫「Allison」就必須全程寫「Allison」，不可寫成「艾莉森」或其他中文音譯。
 - 若敘事視角為第一人稱，旁白中的主角必須全程以「我」自稱，嚴禁在旁白中用主角名字作為第三人稱主語；其他角色在對話中可以叫主角的名字，但旁白只能是「我」。
+- 若敘事視角為第三人稱，旁白中絕對禁止出現「我」作為主語來描述主角；旁白必須全程以主角名字稱呼主角；「我」只允許出現在角色的對話引號之內，旁白一律用名字。違反即失敗。
 - 環境設定（地點、氛圍）必須貫穿全文，不可偷換場景
 - 劇情限制（禁止出現的內容）為硬性禁令，違反即為失敗
 - 希望出現的劇情元素必須在本章中實際發生，不可只用旁白帶過
@@ -458,6 +582,11 @@ _STYLE_SYSTEM_ADDON = """
 - 嚴禁使用「隨後」「不久後」「過了一會兒」「稍後」「片刻後」「沒多久」等跳躍時間的詞略過過程；必須寫出過程本身
 - 情緒反應必須透過身體感受呈現（心跳、呼吸變化、皮膚反應、肌肉張力、手的動作），而非直接陳述「她感到緊張」「他心情複雜」
 - 動詞選擇有力且精準，避免「走」「說」「看」「感到」等平淡動詞，改用具體動作的精確描述
+- 嚴禁重複使用「那股X」作為句子開頭（如「那股觸感」「那股濕熱感」「那股溫熱」「那股心跳」）；整章最多出現四次；改用感受來源當主詞直接描述：✗「那股觸感透過布料傳來——溫熱的」→ ✓「布料貼著皮膚，溫熱的」
+- 嚴禁重複使用「她/角色名 沒有X。」獨立成段的否定靜止句（如「她沒有退開。」「她沒有說話。」「她沒有阻止。」）；整章最多出現三次，超過即為濫用；改用描寫「發生了什麼」代替「沒發生什麼」——例如描述角色靜止的具體身體狀態、表情、呼吸或視線落點
+- 嚴禁重複使用「從X到X」「從X蔓延到Y」「從X延伸到Y」「從X傳到Y」等方位移動句型骨架；整章此類句型最多出現兩次，超過即為結構濫用；改用結果狀態、聲音切入或身體反應代替
+- 嚴禁「從A到B，從B到A」鏡像翻轉結構（如「從陰蒂的位置到陰道口的位置，從陰道口的位置回到陰蒂的位置」）：只寫一個方向，或直接描寫動作的節奏感（「來回磨蹭」「緩慢滑動」）
+- 嚴禁「從A到B，從B到C」三段遞進結構（如「從大腿到腹部，從腹部到胸口」）：直接寫最終部位的狀態，不列路徑
 
 【每章必備元素 — 缺少任何一項即視為不完整】
 - 環境描寫：每個場景開始時必須建立具體的空間感（地點、光線、溫度、氣味、聲音），不可直接跳入對話或動作
@@ -481,6 +610,10 @@ _NSFW_ADDON = """
 ③ 對話與心理：場景中穿插角色的真實對話（情慾狀態下破碎的、直白的語言）與內心反應（慾望、掙扎、沉淪、享受的具體思維片段）
 ④ 高潮呈現：以完整段落（最少 200 字）描寫高潮的生理過程，必須包含：①顫抖的具體部位與方式 ②聲音的音色與強度 ③液體的量、溫度、流動方式 ④身體失控的具體細節（肌肉收縮、腰部動作等）⑤意識狀態的變化
 ⑤ 餘韻：事後的身體狀態（液體殘留、氣息紊亂、疲憊感）、環境細節（床單狀態、室內氣味）、角色的情緒反應或沉默，不可只寫一兩句話帶過
+   【嚴禁語義重複】餘韻段落中，同一個物理事實只能描寫一次：
+   - 體液流出/擴散的事實：只寫一個段落，選擇最具體的角度（流向、溫度、質感擇一深寫），後續段落不可再重述同一件事
+   - ✗ 錯誤：第一段寫「體液從肉穴滲出，流到肉棒上」，第二段又寫「液體沿著莖身往下流」，第三段再寫「小腹一片濕亮」——三段說的是同一件事
+   - ✓ 正確：選一個段落，把體液的溫度、質感、流動路徑、在皮膚上的觸感完整寫清楚；然後下一段切換到不同的感知維度（呼吸、聲音、角色情緒）
 
 缺少任何一個階段，或任何一個階段不足 200 字，即視為場景不完整，必須補足。
 
@@ -516,9 +649,10 @@ _NSFW_ADDON = """
 - 違反此規則即視為整個親密場景失敗，必須重寫兩段中的後一段
 
 【限制級描寫密度 — 每章必須維持第一章的細節水準，不可退化】
-- 描寫身體部位時必須使用具體的情色詞彙（如：肉莖、嫩穴、乳尖、乳暈、菊穴、龜頭、莖身等），嚴禁以「那根東西」「那裡」「它」等模糊代稱替代
+- 描寫身體部位時必須使用具體的情色詞彙（如：肉莖、肉棒、嫩穴、花穴、宮口、乳尖、乳暈、菊穴、龜頭、莖身、馬眼等），嚴禁以「那根東西」「那裡」「它」等模糊代稱替代
 - 每個身體部位的描寫必須包含：外觀（顏色、形狀、大小/比例）、質感（膚色、紋理、血管等可見細節）、狀態（反應、變化、液體等），三者缺一即視為描寫不完整
 - 必須追蹤器官在場景中的動態變化：膨脹、顏色加深、分泌物增加等，不可只描述初始狀態而忽略過程中的變化
+
 - 感官描寫必須在整個場景中交替分佈：視覺（顏色、形狀、動作）、觸覺（溫度、質地、壓力、震動）、聽覺（水聲、啪啪聲、呼吸聲、嬌吟聲）——三種感官應貫穿整個場景，每個段落只選最契合當下動作的一種或兩種，禁止在每個動作後把全部感官重複列出一遍
 - 親密場景中的對話必須符合當下的情慾狀態，不可過於文雅或保守；角色在高度興奮下說出的話應反映真實的生理與情緒狀態
 - 若場景中有旁觀者，旁觀者的視覺觀察、內心反應、身體反應必須完整描寫，其視角可提供主角視角以外的外觀細節
@@ -536,6 +670,7 @@ _NSFW_ADDON = """
   ✓ 正確：「Dalon Tsai的目光在她身上停了很久，像是在清點什麼。」
   規則：感官細節由發出感覺的物體或動作當主詞，直接描述它的狀態或動作，不需要透過「她能X到」這個中繼結構
 - 【每句話必須推進場景，不可重播狀態】寫每一句前先問：「這個瞬間，有什麼東西改變了？」若無改變，這句話不應該存在；每個句子都必須讓某件事移動——位置、力道、節奏、情緒、身體反應、意識狀態至少其一
+- 【嚴禁語義重複段落】同一個物理事實不可在連續段落中用不同措辭重述：若第一段已描寫「體液從穴口滲出」，後續段落不可再寫「液體沿莖身流下」「小腹濕亮」——這三件事是同一件事，只能選一個段落寫透，其餘段落必須切換到完全不同的感知維度（聲音、呼吸、情緒、環境）
 - 【高潮段落必須各自不同】同一章中若出現多次高潮，每次的描寫方式、句型、視角、側重點必須截然不同；禁止複製貼上相同的高潮框架（如「Dalon Tsai的身體在顫抖，陰道在收縮，在顫抖。然後——那股噴射。」）；第一次可寫生理細節，第二次可寫角色反應與心理，第三次可寫環境或聲音，必須真正推進，而非重播
 - 【動作動詞必須輪換】同一個持續動作（如抽插、吸吮、磨蹭）禁止在三段之內使用相同的動詞組合；必須交替使用不同角度的動詞：力道變化、節奏轉換、角度調整、情緒層次，讓讀者感受到動態的推進而非靜止的循環
 
@@ -882,6 +1017,7 @@ def stream_outline(
     ending_suggestion: str = "",
     opening_suggestion: str = "",
     batch_hint: str = "",
+    nsfw: bool = False,
     **kwargs,
 ):
     """Generate a structured chapter outline before full chapter generation."""
@@ -976,8 +1112,25 @@ def stream_outline(
     )
 
     directive_part = (
-        f"\n【本章特別指示 — 大綱必須納入以下元素】\n{chapter_directive}"
+        f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"⚠️⚠️【本章強制執行指示 — 最高優先，凌駕所有規則】\n"
+        f"以下指示中的每一個場景、動作、對話、情節步驟，都必須在「本章情節」中作為獨立的情節點逐條列出，"
+        f"不可壓縮到「角色互動重點」、不可合併、不可省略、不可用旁白帶過。\n"
+        f"情節點數量應與指示的步驟數量相符，不必限制在5點。\n\n"
+        f"{chapter_directive}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         if chapter_directive.strip() else ""
+    )
+
+    nsfw_outline_part = (
+        "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "【🔞 限制級大綱規則 — 強制執行】\n"
+        "本故事已開啟限制級模式。大綱中涉及親密場景、性愛場景的情節點：\n"
+        "- 必須明確列出每個動作步驟（不可用「兩人發生關係」等模糊詞帶過）\n"
+        "- 身體接觸、器官狀態、感官反應、角色心理必須各自作為獨立情節點\n"
+        "- 使用者指示中的每一個具體動作（如：脫衣、跪地、皮帶、口交、腳踩等）必須逐條出現在情節點中\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        if nsfw else ""
     )
     correction_part = (
         f"\n\n⚠️⚠️【大綱修正指示 — 最高優先，絕對強制執行】\n"
@@ -1014,6 +1167,11 @@ def stream_outline(
     if plot_forbid:
         plot_part += f"\n禁止出現：{plot_forbid}"
 
+    _directive_beat_note = (
+        "⚠️ 有強制執行指示：情節點數量不限於5點，指示中每個步驟都必須作為獨立情節點列出。"
+        if chapter_directive.strip() else "依序發生，每點30字以上"
+    )
+
     prompt = f"""請為以下故事規劃第 {chapter_num} 章的大綱。
 
 {world_info}
@@ -1027,6 +1185,7 @@ def stream_outline(
 {prev_outlines_block}
 {progress_note}
 {plot_part}
+{nsfw_outline_part}
 {directive_part}
 {correction_part}
 {opening_part}
@@ -1037,15 +1196,14 @@ def stream_outline(
 **場景設定**
 {_opening_format_line}
 
-**本章情節（依序發生，每點30字以上）**
+**本章情節（{_directive_beat_note}）**
 1.
 2.
 3.
-4.
-5.
+（根據指示步驟數量繼續列出，不必限制在5點）
 
 **角色互動重點**
-（主角與哪些角色有什麼具體互動，包括對話方向或衝突）
+（補充情節點未涵蓋的互動細節；若強制執行指示已涵蓋所有互動，此段可簡短）
 
 **感情線進展**
 （若有CP，描述本章感情關係的具體變化；需符合感情備注的限制）
@@ -1362,7 +1520,9 @@ def stream_chapter(
         f"其他角色對主角說話時，只能使用以下稱呼：{_call_names}，不可自創其他名字或音譯。"
         f"旁白中的主角只能用「我」。"
         if is_first_person else
-        f"敘事視角：第三人稱。旁白以主角名字「{name}」敘述。"
+        f"敘事視角：第三人稱。旁白全程以主角名字「{name}」敘述，嚴禁在旁白中使用「我」作為主語。"
+        f"「我」只能出現在角色的對話引號之內；旁白遇到主角一律寫「{name}」，不可寫「我」。"
+        f"這是最高優先規則，違反即視為失敗，必須重寫。"
     )
 
     outline_block = (
@@ -1407,6 +1567,13 @@ def stream_chapter(
     )
 
     if chapter_num == 1:
+        _outline_final_reminder_ch1 = (
+            f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"【🔴 動筆前最終確認：本章大綱 — 以下每個情節點必須在正文中具體發生，不可省略】\n"
+            f"{outline.strip()}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            if outline.strip() else ""
+        )
         prompt = f"""{outline_block + chr(10) + chr(10) if outline_block else ""}{directive_block + chr(10) + chr(10) if directive_block else ""}故事設定：
 {setting_block}
 
@@ -1421,7 +1588,7 @@ def stream_chapter(
 {length_block}
 {style_block}
 {outline_block}
-{directive_block}{_nsfw_reminder}
+{directive_block}{_nsfw_reminder}{_outline_final_reminder_ch1}
 直接輸出故事正文，格式如下：
 
 第一章　[章節標題]
@@ -1446,6 +1613,13 @@ def stream_chapter(
             f"{memory_block}\n"
             f"【以上記憶讀完，方可繼續閱讀下方設定與規則】\n"
         ) if memory_block else ""
+        _outline_final_reminder = (
+            f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"【🔴 動筆前最終確認：本章大綱 — 以下每個情節點必須在正文中具體發生，不可省略】\n"
+            f"{outline.strip()}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            if outline.strip() else ""
+        )
         prompt = f"""{memory_header}
 {outline_block + chr(10) if outline_block else ""}{directive_block + chr(10) if directive_block else ""}故事設定：
 {setting_block}
@@ -1463,7 +1637,7 @@ def stream_chapter(
 1. 本章開場必須直接承接以下最後一幕的時間點與地點，不可跳過或無視
 2. 角色所在地點與上一章結尾一致；若需換場景，必須在正文中明確交代移動過程
 {context}
-{_nsfw_reminder}
+{_nsfw_reminder}{_outline_final_reminder}
 直接輸出故事正文，格式如下：
 
 第{chapter_num}章　[章節標題]
