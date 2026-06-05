@@ -361,6 +361,27 @@ with st.sidebar:
     if uploaded is not None and uploaded.name != st.session_state.last_loaded_file:
         try:
             data = json.loads(uploaded.read().decode("utf-8"))
+            # Normalize external format: characters[] array → protagonist top-level + cp_characters
+            if "characters" in data and not data.get("cp_characters") and not data.get("name"):
+                _chars = data["characters"]
+                if _chars:
+                    _proto = _chars[0]
+                    for _pk in ["name", "nickname", "gender", "personality", "background",
+                                "residence", "notes", "age", "height", "body_type",
+                                "face_shape", "eyes", "nose", "mouth", "hair", "skin",
+                                "clothing", "voice"]:
+                        if _pk in _proto and _pk not in data:
+                            data[_pk] = _proto[_pk]
+                    data["cp_characters"] = _chars[1:]
+            # Map non-standard cp_type values to valid options
+            _cp_type_raw = data.get("cp_type", "")
+            if _cp_type_raw and _cp_type_raw not in ("無 CP", "我 × 角色", "角色 × 角色"):
+                if "無" in _cp_type_raw or not _cp_type_raw:
+                    data["cp_type"] = "無 CP"
+                elif "角色" in _cp_type_raw and ("我" not in _cp_type_raw and "×" not in _cp_type_raw[:3]):
+                    data["cp_type"] = "角色 × 角色"
+                else:
+                    data["cp_type"] = "我 × 角色"
             for key in ["world_mode", "world_input", "character_notes", "language",
                         "perspective", "length_label", "total_chapters", "cp_type",
                         "love_tone", "pacing",
