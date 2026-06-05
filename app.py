@@ -382,6 +382,32 @@ with st.sidebar:
                     data["cp_type"] = "角色 × 角色"
                 else:
                     data["cp_type"] = "我 × 角色"
+            # Normalize gender to valid radio options
+            _gender_raw = data.get("gender", "")
+            if _gender_raw and _gender_raw not in ("女", "男", "不設定"):
+                if _gender_raw.startswith("男"):
+                    data["gender"] = "男"
+                elif _gender_raw.startswith("女"):
+                    data["gender"] = "女"
+                else:
+                    data["gender"] = "不設定"
+            # Normalize pacing to valid selectbox options
+            _valid_pacings = ["緩節奏・日常堆疊", "緩節奏・情緒內斂", "緩節奏・情緒爆發",
+                              "快節奏・情緒內斂", "快節奏・情緒爆發", "張弛交替・積蓄爆發"]
+            _pacing_raw = data.get("pacing", "")
+            if _pacing_raw and _pacing_raw not in _valid_pacings:
+                _matched = next((p for p in _valid_pacings if _pacing_raw.startswith(p)), None)
+                data["pacing"] = _matched if _matched else _valid_pacings[-1]
+            # Normalize length_label to valid select_slider options
+            _valid_lengths = ["短篇（約 800 字）", "中篇（約 2000 字）", "長篇（約 4000 字）"]
+            _length_raw = data.get("length_label", "")
+            if _length_raw and _length_raw not in _valid_lengths:
+                if "長篇" in _length_raw:
+                    data["length_label"] = "長篇（約 4000 字）"
+                elif "短篇" in _length_raw:
+                    data["length_label"] = "短篇（約 800 字）"
+                else:
+                    data["length_label"] = "中篇（約 2000 字）"
             for key in ["world_mode", "world_input", "character_notes", "language",
                         "perspective", "length_label", "total_chapters", "cp_type",
                         "love_tone", "pacing",
