@@ -1021,10 +1021,7 @@ def stream_outline(
     **kwargs,
 ):
     """Generate a structured chapter outline before full chapter generation."""
-    world_info = (
-        f"作品：《{world_input}》" if world_mode == "作品世界"
-        else f"世界背景：{world_input[:150]}"
-    )
+    world_info = _world_str(world_mode, world_input)
 
     history_lines = ""
     if early_overview:
